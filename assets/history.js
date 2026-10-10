@@ -6,9 +6,9 @@
   "use strict";
 
   var SERIES = [
-    { key: "missing", label: "Missing in OSM", short: "missing", color: "#7048e8" },
-    { key: "mismatch", label: "Name mismatch", short: "name mismatch", color: "#1c7ed6" },
-    { key: "unnamed", label: "OSM area unnamed", short: "unnamed", color: "#e8590c" },
+    { key: "missing", label: "Basins missing in OSM", short: "missing", color: "#7048e8" },
+    { key: "unclassified", label: "Mapped as plain water", short: "plain water", color: "#e8590c" },
+    { key: "creek_unnamed", label: "Named creeks unnamed in OSM", short: "creeks unnamed", color: "#1c7ed6" },
   ];
   var W = 860, H = 320;
   var M = { top: 16, right: 150, bottom: 36, left: 48 };

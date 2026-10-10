@@ -9,6 +9,7 @@ from datetime import date
 from PIL import Image
 
 from src import config, history
+from src.download import sidecar_path
 
 # Screenshots shown on the landing page, copied from the project root when
 # present (they are added manually after the first publish).
@@ -20,10 +21,10 @@ def build_site():
     """Render index.html, copy assets and screenshots into build/site/."""
     os.makedirs(config.SITE_DIR, exist_ok=True)
 
-    park_count = "120+"
+    basin_count = "90+"
     if os.path.isfile(config.COUNT_PATH):
         with open(config.COUNT_PATH, encoding="utf-8") as f:
-            park_count = f"{int(f.read().strip()):,}"
+            basin_count = f"{int(f.read().strip()):,}"
 
     build_date = date.today().isoformat()
 
@@ -43,9 +44,10 @@ def build_site():
         ),
         "{{BUILD_DATE}}": build_date,
         "{{DATA_DATE}}": _data_date(build_date),
-        "{{PARK_COUNT}}": park_count,
+        "{{BASIN_COUNT}}": basin_count,
         "{{GITHUB_REPO}}": config.GITHUB_REPO,
         "{{DATASET_PAGE}}": config.DATASET_PAGE,
+        "{{CREEKS_PAGE}}": config.CREEKS_PAGE,
         "{{LICENSE_URL}}": config.LICENSE_URL,
         "{{LICENSE_NOTICE}}": config.LICENSE_NOTICE,
     }
@@ -93,11 +95,13 @@ def _build_gaps_page(build_date):
         "{{BUILD_DATE}}": build_date,
         "{{DATA_DATE}}": _data_date(build_date),
         "{{MISSING_COUNT}}": f"{summary.get('missing', 0):,}",
-        "{{MISMATCH_COUNT}}": f"{summary.get('mismatch', 0):,}",
-        "{{UNNAMED_COUNT}}": f"{summary.get('unnamed', 0):,}",
-        "{{PLACEHOLDER_COUNT}}": f"{summary.get('placeholder', 0):,}",
+        "{{UNCLASSIFIED_COUNT}}": f"{summary.get('unclassified', 0):,}",
+        "{{CLASSIFIED_COUNT}}": f"{summary.get('classified', 0):,}",
+        "{{WETLAND_COUNT}}": f"{summary.get('wetland', 0):,}",
+        "{{CREEK_COUNT}}": f"{summary.get('creek_unnamed', 0):,}",
         "{{CITY_COUNT}}": f"{summary.get('city', 0):,}",
-        "{{OSM_COUNT}}": f"{summary.get('osm_rings', 0):,}",
+        "{{CREEKS_COUNT}}": f"{summary.get('creeks', 0):,}",
+        "{{OSM_COUNT}}": f"{summary.get('osm_areas', 0):,}",
         "{{OSM_DATE}}": summary.get("osm_date", build_date),
         "{{OSM_NOTE}}": _osm_note(summary),
         "{{GITHUB_REPO}}": config.GITHUB_REPO,
@@ -109,6 +113,7 @@ def _build_gaps_page(build_date):
         "{{LICENSE_URL}}": config.LICENSE_URL,
         "{{LICENSE_NOTICE}}": config.LICENSE_NOTICE,
         "{{DATASET_PAGE}}": config.DATASET_PAGE,
+        "{{CREEKS_PAGE}}": config.CREEKS_PAGE,
     }
     for key, value in replacements.items():
         html = html.replace(key, value)
@@ -169,7 +174,7 @@ def _osm_note(summary):
 
     The gap list is only worth acting on if both sides are fresh, and the OSM
     side is the one that moves daily. A page dated today whose OSM data is two
-    weeks old sends a mapper to add a park somebody else already added.
+    weeks old sends a mapper to draw a basin somebody else already drew.
     """
     if not summary.get("osm_stale"):
         return ""
@@ -182,9 +187,10 @@ def _osm_note(summary):
 
 
 def _data_date(fallback):
-    """Return the City data's date (YYYY-MM-DD) from the download sidecar."""
-    if os.path.isfile(config.LAST_DOWNLOAD_PATH):
-        with open(config.LAST_DOWNLOAD_PATH, encoding="utf-8") as f:
+    """Return the basin data's date (YYYY-MM-DD) from its download sidecar."""
+    path = sidecar_path("basins")
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
             sidecar = json.load(f)
         match = re.search(r"\d{4}-\d{2}-\d{2}", sidecar.get("filename", ""))
         if match:

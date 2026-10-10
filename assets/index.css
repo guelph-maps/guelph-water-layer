@@ -135,3 +135,19 @@ footer {
   color: var(--muted);
   font-size: .9rem;
 }
+
+.key {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border: 2px solid;
+  vertical-align: middle;
+  margin: 0 .15rem 0 .3rem;
+}
+.key.wet { background: rgba(30, 136, 229, .47); border-color: #0d47a1; }
+.key.dry {
+  border-color: #1565c0;
+  background: repeating-linear-gradient(-45deg, rgba(21, 101, 192, .67) 0 1px,
+    rgba(30, 136, 229, .16) 1px 6px);
+}
+.key.wetland { background: rgba(0, 137, 123, .4); border-color: #00695c; }

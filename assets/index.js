@@ -1,4 +1,4 @@
-// Guelph Parks landing page: preview map + copy buttons.
+// Guelph water layer landing page: preview map + copy buttons.
 
 (function () {
   "use strict";

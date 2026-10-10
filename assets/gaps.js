@@ -4,8 +4,14 @@
   "use strict";
 
   var COLORS = {
-    missing: "#7048e8", mismatch: "#1c7ed6", unnamed: "#e8590c",
-    placeholder: "#868e96",
+    missing: "#7048e8", unclassified: "#e8590c", creek_unnamed: "#1c7ed6",
+    wetland: "#0c8599", classified: "#2b8a3e",
+  };
+  // Table order: the work first, the done last.
+  var ORDER = ["missing", "unclassified", "creek_unnamed", "wetland", "classified"];
+  var LABELS = {
+    missing: "missing", unclassified: "plain water", creek_unnamed: "creek unnamed",
+    wetland: "wetland", classified: "tagged as basin",
   };
   var map;
   var features = [];
@@ -131,13 +137,51 @@
       'title="Open in the iD editor (hotkey: I)">iD</a>';
   }
 
+  // What the row is called: a creek by its name; a basin by its City type,
+  // with where it is underneath. Never by the City's plan label as if it were
+  // a name.
+  function title(p) {
+    return p.status === "creek_unnamed" ? p.name : p.type;
+  }
+
+  function where(p) {
+    if (p.status === "creek_unnamed") {
+      return p.wholly ? "creek &middot; wholly unnamed in OSM" : "creek &middot; partly unnamed";
+    }
+    var bits = [];
+    if (p.locdesc) { bits.push(esc(p.locdesc)); }
+    if (p.plan) { bits.push("plan: " + esc(p.plan)); }
+    if (p.fenced === "Yes") { bits.push("fenced"); }
+    return bits.join(" &middot; ");
+  }
+
+  function size(p) {
+    if (p.status === "creek_unnamed") {
+      return fmt(p.unnamed_m) + " of " + fmt(p.total_m) + " m";
+    }
+    return fmt(p.area) + " m&sup2;";
+  }
+
+  function tagsHtml(p) {
+    if (p.status === "creek_unnamed") {
+      return '<span class="tags">no name &rarr; name=' + esc(p.name) + "</span>";
+    }
+    var now = p.osm_tags ? esc(p.osm_tags) : "&mdash;";
+    if (p.status === "classified" || !p.suggest) {
+      return '<span class="tags">' + now + "</span>";
+    }
+    return '<span class="tags">' + now + " &rarr; " + esc(p.suggest) + "</span>";
+  }
+
+  function fmt(n) { return (n == null ? 0 : n).toLocaleString("en-CA"); }
+
   function popupHtml(f) {
     var p = f.properties;
-    var h = "<strong>" + esc(p.name || "(unnamed)") + "</strong><br>" +
-      esc(p.address || "") + " &middot; " + p.status;
-    if (p.status === "mismatch") {
-      h += "<br>OSM name: " + (p.osm_name ? esc(p.osm_name) : "<em>none</em>");
-    }
+    var h = "<strong>" + esc(title(p)) + "</strong> &middot; " +
+      LABELS[p.status] + "<br>" + size(p);
+    var w = where(p);
+    if (w) { h += "<br>" + w; }
+    h += "<br>" + tagsHtml(p);
     var links = osmPairHtml(f);
     if (links) { h += "<br>" + links; }
     return h;
@@ -146,20 +190,23 @@
   function buildTable() {
     var tbody = document.querySelector("#gap-table tbody");
     var rows = features.slice().sort(function (a, b) {
-      return (a.properties.name || "").localeCompare(b.properties.name || "");
+      var pa = a.properties, pb = b.properties;
+      var d = ORDER.indexOf(pa.status) - ORDER.indexOf(pb.status);
+      if (d) { return d; }
+      return (pb.unnamed_m || pb.area || 0) - (pa.unnamed_m || pa.area || 0);
     });
     tbody.innerHTML = rows.map(function (f) {
       var p = f.properties;
       var links = osmPairHtml(f);
       var osm = links
-        ? (p.osm_name ? '<span class="osm-name">' + esc(p.osm_name) + "</span>" : "") +
-          '<span class="osm-links">' + links + "</span>"
+        ? '<span class="osm-links">' + links + "</span>"
         : '<span class="osm-blank">&mdash;</span>';
       return '<tr data-i="' + p._i + '" data-status="' + p.status +
-        '" data-name="' + esc((p.name || "").toLowerCase()) + '">' +
-        "<td>" + esc(p.name || "(unnamed)") + "</td>" +
-        "<td>" + esc(p.address || "") + "</td>" +
-        '<td class="status-' + p.status + '">' + p.status + "</td>" +
+        '" data-name="' + esc(searchText(p)) + '">' +
+        "<td>" + esc(title(p)) + '<span class="sub">' + where(p) + "</span></td>" +
+        "<td>" + size(p) + "</td>" +
+        '<td class="status-' + p.status + '">' + LABELS[p.status] + "</td>" +
+        "<td>" + tagsHtml(p) + "</td>" +
         "<td>" + osm + "</td></tr>";
     }).join("");
 
@@ -193,12 +240,10 @@
   }
 
   function wireControls() {
-    var boxes = {
-      missing: document.getElementById("show-missing"),
-      mismatch: document.getElementById("show-mismatch"),
-      unnamed: document.getElementById("show-unnamed"),
-      placeholder: document.getElementById("show-placeholder"),
-    };
+    var boxes = {};
+    ORDER.forEach(function (k) {
+      boxes[k] = document.getElementById("show-" + k);
+    });
     var filter = document.getElementById("filter");
 
     function statusOn(status) {
@@ -212,7 +257,7 @@
       features.forEach(function (f) {
         var p = f.properties;
         var hit = statusOn(p.status) &&
-          (!q || (p.name || "").toLowerCase().indexOf(q) > -1);
+          (!q || searchText(p).indexOf(q) > -1);
         var m = markers[p._i];
         if (hit && !map.hasLayer(m)) { map.addLayer(m); }
         else if (!hit && map.hasLayer(m)) { map.removeLayer(m); }
@@ -244,6 +289,11 @@
       ev.preventDefault();
       window.open(key === "o" ? t.osm : t.id, "_blank", "noopener");
     });
+  }
+
+  function searchText(p) {
+    return [p.name, p.type, p.kind, p.locdesc, p.plan, p.ownedby]
+      .filter(Boolean).join(" ").toLowerCase();
   }
 
   function esc(s) {

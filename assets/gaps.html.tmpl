@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Guelph Parks &mdash; OSM Coverage Gaps</title>
+<title>Guelph Stormwater Basins &mdash; OSM Coverage Gaps</title>
 <link rel="stylesheet" href="../index.css">
 <link rel="stylesheet" href="gaps.css">
 <link rel="stylesheet"
@@ -19,23 +19,46 @@
 
 <header class="bar">
   <div class="bar-head">
-    <h1>Guelph Parks &mdash; OSM coverage gaps</h1>
+    <h1>Guelph stormwater basins &mdash; OSM coverage gaps</h1>
     <a class="back" href="../">&larr; reference layer</a>
     <a class="back" href="history.html">gaps over time &rarr;</a>
   </div>
   <div class="counts">
-    <div class="count missing"><strong>{{MISSING_COUNT}}</strong><span>missing in OSM</span></div>
-    <div class="count mismatch"><strong>{{MISMATCH_COUNT}}</strong><span>name mismatches</span></div>
-    <div class="count unnamed"><strong>{{UNNAMED_COUNT}}</strong><span>OSM area unnamed</span></div>
-    <div class="count placeholder"><strong>{{PLACEHOLDER_COUNT}}</strong><span>City name is a placeholder</span></div>
-    <div class="count"><strong>{{CITY_COUNT}}</strong><span>City polygons</span></div>
-    <div class="count"><strong>{{OSM_COUNT}}</strong><span>OSM park areas</span></div>
+    <div class="count missing"><strong>{{MISSING_COUNT}}</strong><span>basins missing in OSM</span></div>
+    <div class="count unclassified"><strong>{{UNCLASSIFIED_COUNT}}</strong><span>mapped as plain water</span></div>
+    <div class="count creek_unnamed"><strong>{{CREEK_COUNT}}</strong><span>named creeks unnamed in OSM</span></div>
+    <div class="count wetland"><strong>{{WETLAND_COUNT}}</strong><span>constructed wetlands</span></div>
+    <div class="count classified"><strong>{{CLASSIFIED_COUNT}}</strong><span>tagged as basins</span></div>
+    <div class="count"><strong>{{CITY_COUNT}}</strong><span>City basins &middot; {{CREEKS_COUNT}} named creeks</span></div>
+    <div class="count"><strong>{{OSM_COUNT}}</strong><span>OSM water areas</span></div>
     <div class="count meta-count">City data {{DATA_DATE}} &middot; OSM data {{OSM_DATE}} &middot; compared {{BUILD_DATE}}</div>
   </div>
   {{OSM_NOTE}}
+  <details class="tagging">
+    <summary>Which tag suits which basin</summary>
+    <ul>
+      <li><strong>Wet pond</strong> (a permanent pool): <code>natural=water</code> +
+        <code>water=basin</code>, optionally <code>basin=retention</code> &mdash;
+        the scheme Guelph's mapped ponds already use.</li>
+      <li><strong>Dry basin</strong> (a grass hollow that floods after a storm):
+        <code>landuse=basin</code> + <code>basin=detention</code>. It is not
+        water most days, so not <code>natural=water</code>.</li>
+      <li><strong>Infiltration basin</strong>: <code>landuse=basin</code> +
+        <code>basin=infiltration</code>.</li>
+      <li><strong>Constructed wetland</strong>: not settled &mdash; listed apart,
+        nothing suggested.</li>
+      <li>Either scheme counts as <em>tagged as a basin</em>; a bare
+        <code>natural=water</code>, <code>water=pond</code> or
+        <code>water=reservoir</code> counts as <em>plain water</em>.</li>
+      <li>The City's <em>plan</em> is a subdivision-plan label, <strong>not a
+        name</strong> &mdash; never copy it into <code>name</code>. A creek's
+        City name is a real name: that is the one to add.</li>
+    </ul>
+  </details>
   <p class="licence">
     <a href="{{LICENSE_URL}}">{{LICENSE_NOTICE}}</a>
-    Source: <a href="{{DATASET_PAGE}}">Park Boundary</a>.
+    Sources: <a href="{{DATASET_PAGE}}">Stormwater Management Pond</a>,
+    <a href="{{CREEKS_PAGE}}">Watercourse Polygons</a>.
   </p>
 </header>
 
@@ -49,28 +72,30 @@
       <div class="controls">
         <label><span class="swatch missing"></span>
           <input type="checkbox" id="show-missing" checked> Missing</label>
-        <label><span class="swatch mismatch"></span>
-          <input type="checkbox" id="show-mismatch" checked> Mismatch</label>
-        <label><span class="swatch unnamed"></span>
-          <input type="checkbox" id="show-unnamed" checked> Unnamed OSM</label>
-        <label><span class="swatch placeholder"></span>
-          <input type="checkbox" id="show-placeholder"> Placeholder name</label>
-        <input type="search" id="filter" placeholder="Filter by name...">
+        <label><span class="swatch unclassified"></span>
+          <input type="checkbox" id="show-unclassified" checked> Plain water</label>
+        <label><span class="swatch creek_unnamed"></span>
+          <input type="checkbox" id="show-creek_unnamed" checked> Creek unnamed</label>
+        <label><span class="swatch wetland"></span>
+          <input type="checkbox" id="show-wetland"> Wetland</label>
+        <label><span class="swatch classified"></span>
+          <input type="checkbox" id="show-classified"> Tagged as basin</label>
+        <input type="search" id="filter" placeholder="Filter by type, place, creek...">
       </div>
       <p class="hint">
-        Green fills are the City's parks (raster layer); coloured dots flag the
+        Blue fills are the City's basins (raster layer); coloured dots flag the
         gaps. Click a row to outline it on the map, then press <kbd>O</kbd> to
         open it on openstreetmap.org or <kbd>I</kbd> in the iD editor (each row
-        has the same <strong>OSM&nbsp;&middot;&nbsp;iD</strong> link pair).
-        Matching is by spatial overlap &mdash; verify against imagery before
-        editing OSM.
+        has the same <strong>OSM&nbsp;&middot;&nbsp;iD</strong> link pair; for
+        a mapped basin or a creek they open the OSM element). Matching is by
+        spatial overlap &mdash; verify against imagery before editing OSM.
       </p>
     </div>
     <div class="table-scroll">
       <table id="gap-table">
         <thead>
-          <tr><th class="col-name">Park (City name)</th><th>Address</th>
-              <th>Status</th><th>OSM &middot; iD</th></tr>
+          <tr><th class="col-name">Basin or creek</th><th>Size</th>
+              <th>Status</th><th>OSM now &rarr; suggested</th><th>OSM &middot; iD</th></tr>
         </thead>
         <tbody></tbody>
       </table>

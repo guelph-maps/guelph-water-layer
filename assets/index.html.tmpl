@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Guelph Parks &mdash; Reference Layer for OSM Editors</title>
+<title>Guelph Stormwater Basins &mdash; Reference Layer for OSM Editors</title>
 <link rel="stylesheet" href="index.css">
 <link rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -17,11 +17,12 @@
 <body>
 <main>
 
-<h1>Guelph Parks</h1>
+<h1>Guelph Stormwater Basins</h1>
 <p class="lead">
-  A reference layer of the park boundaries published by the City of Guelph
-  &mdash; <strong>{{PARK_COUNT}}</strong> polygons with their official names
-  &mdash; ready to add to the
+  A reference layer of the stormwater management basins published by the City
+  of Guelph &mdash; <strong>{{BASIN_COUNT}}</strong> wet ponds, dry and
+  infiltration basins and constructed wetlands &mdash; with the City's creek
+  corridors drawn faintly behind them, ready to add to the
   <a href="https://www.openstreetmap.org">OpenStreetMap</a> editors
   <strong>iD</strong> and <strong>JOSM</strong> while you map.
 </p>
@@ -29,42 +30,63 @@
 
 <div class="attribution">
   <a href="{{LICENSE_URL}}">{{LICENSE_NOTICE}}</a>
-  Source: <a href="{{DATASET_PAGE}}">Park Boundary</a>.
+  Sources: <a href="{{DATASET_PAGE}}">Stormwater Management Pond</a>,
+  <a href="{{CREEKS_PAGE}}">Watercourse Polygons</a>.
 </div>
 
 <h2>Preview</h2>
 <div id="preview-map" data-raster-url="{{RASTER_URL}}"></div>
 <p class="meta">
-  The raster layer drawn over OpenStreetMap: park boundaries with names.
-  Pan and zoom to check coverage for the area you map.
+  The raster layer drawn over OpenStreetMap. <span class="key wet"></span> solid
+  blue: a wet pond, which holds a permanent pool.
+  <span class="key dry"></span> pale blue, hatched: a dry or infiltration basin,
+  a grass hollow that holds water only after a storm.
+  <span class="key wetland"></span> teal: a constructed wetland. The faint
+  grey-blue wash is a creek corridor, labelled where the City names the creek.
 </p>
 
 <div class="attribution">
-  <strong>Coverage vs OpenStreetMap:</strong> see which City parks are
-  <a href="gaps/">missing from OSM or named differently</a> &mdash; a mapper's
-  worklist with an interactive map and table.
+  <strong>Coverage vs OpenStreetMap:</strong> see which City basins are
+  <a href="gaps/">missing from OSM or mapped as plain water</a>, and which
+  named creeks run unnamed in OSM &mdash; a mapper's worklist with an
+  interactive map and table.
 </div>
 
 <h2>Two layers &mdash; which to use</h2>
 <table>
   <tr>
     <th>Vector layer</th>
-    <td>Interactive. Click a polygon to read its tags
-        (<code>name</code>, <code>address</code>, <code>objectid</code>).
+    <td>Interactive, in two layers: <code>basins</code> (click one to read
+        <code>kind</code>, <code>type</code>, <code>area</code>,
+        <code>fenced</code>, <code>installyear</code>, <code>ownedby</code>,
+        <code>locdesc</code>, <code>plan</code>) and <code>watercourses</code>
+        (<code>name</code> where the City has one).
         Best in <strong>iD</strong>.</td>
   </tr>
   <tr>
     <th>Raster layer</th>
-    <td>Boundaries and park names drawn directly on the tiles. A readable
-        backdrop. Best in <strong>JOSM</strong>.</td>
+    <td>Basins coloured by kind, creek corridors and creek names drawn on the
+        tiles. A readable backdrop. Best in <strong>JOSM</strong>.</td>
   </tr>
 </table>
 
 <div class="note">
-  <strong>Heads-up:</strong> at city-overview zooms only parks big enough to
-  read are labelled &mdash; big parks from city zoom, small parkettes as you
-  zoom in. From the closer raster zooms inward every named park is labelled;
-  small parks carry their name just below the polygon so it never overhangs.
+  <strong>Which tag?</strong> A <strong>wet pond</strong> takes
+  <code>natural=water</code> + <code>water=basin</code> &mdash; the scheme
+  Guelph's mapped ponds already use &mdash; optionally with
+  <code>basin=retention</code>. A <strong>dry basin</strong> is not water: map
+  it as <code>landuse=basin</code> + <code>basin=detention</code>, and an
+  <strong>infiltration basin</strong> as <code>landuse=basin</code> +
+  <code>basin=infiltration</code>. How a <strong>constructed wetland</strong>
+  should be tagged is not settled; leave what is there.
+</div>
+
+<div class="note">
+  <strong>The City's <code>plan</code> is not a name.</strong> It is the
+  subdivision plan the basin was built under (&ldquo;Plan 680 &ndash; Hanlon
+  Industrial Park &ndash; Phase 2&rdquo;). It is there to help you find the
+  basin in City documents &mdash; do not copy it into <code>name</code>.
+  Creek names are the opposite case: those are real names.
 </div>
 
 <h2>Add to iD</h2>
@@ -74,9 +96,9 @@
   <li>Under <em>Custom Map Data</em>, open the settings and paste this URL:</li>
 </ol>
 <pre class="url">{{VECTOR_URL}}</pre>
-<p>Zoom in, then click any park to see its tags in the inspector.</p>
+<p>Zoom in, then click any basin to see its tags in the inspector.</p>
 
-<h3>Raster layer (visible names)</h3>
+<h3>Raster layer (colours and creek names)</h3>
 <ol>
   <li>Open the <em>Background</em> panel and choose <em>Custom</em>.</li>
   <li>Paste this URL template:</li>
@@ -92,7 +114,7 @@
 </ol>
 <pre class="url">tms[13,17]:{{RASTER_URL_JOSM}}</pre>
 <p>
-  Give it a name such as <em>Guelph Parks</em>, click OK, then enable
+  Give it a name such as <em>Guelph Stormwater Basins</em>, click OK, then enable
   it from the <em>Imagery</em> menu. Note JOSM's placeholder is
   <code>{zoom}</code>, not <code>{z}</code>.
 </p>
@@ -106,27 +128,26 @@
 
 <h2>Notes</h2>
 <ul>
-  <li>Every park the City publishes as in use is kept; parks flagged retired,
-      proposed or planned would be dropped (today the City publishes none).
-      The one polygon the City calls &ldquo;Unnamed Neighbourhood Park&rdquo;
-      is filtered out of the tiles &mdash; that is a placeholder, not a name.</li>
-  <li>Names come from the City's cased <code>Name</code> field, not its ALL CAPS
-      <code>ParkName</code>. A few carry the City's own casing slips
-      (&ldquo;O'connor&rdquo;, &ldquo;I.o.d.e.&rdquo;) &mdash; fix those by hand
-      rather than copying them.</li>
+  <li>Of the City's 152 rows, the 93 that are basins of 500&nbsp;m&sup2; or
+      more are drawn. Left out: 37 Greenway swales (grassed ditches along lot
+      lines), one buried rock trench, seven rows with no type, and 14 basins
+      under 500&nbsp;m&sup2; &mdash; infiltration galleries too small to see on
+      imagery.</li>
+  <li>Every watercourse polygon the City publishes is drawn; 13 of the 71 carry
+      a creek name.</li>
   <li>Vector tiles are pre-rendered through zoom 19; raster tiles for
       z13&ndash;17 (the editor overzooms them further).</li>
   <li>Tiles are refreshed weekly from the City's service.</li>
-  <li>This is a <strong>reference</strong> layer &mdash; verify against survey or
-      imagery before copying anything into OpenStreetMap. The City's boundary is
-      the parcel it owns, which can include a road allowance or a stormwater
-      block that nobody would call part of the park.</li>
+  <li>This is a <strong>reference</strong> layer &mdash; verify against imagery
+      before copying anything into OpenStreetMap. A dry basin is a grass hollow
+      and often fenced (the City records <code>fenced</code>); trace the
+      hollow you can see, not a parcel.</li>
 </ul>
 
 <footer>
   <a href="https://github.com/{{GITHUB_REPO}}">Project source on GitHub</a>
   &nbsp;&middot;&nbsp;
-  <a href="https://skfd.github.io/toronto-parks-layer/">Toronto parks layer</a>
+  <a href="https://github.com/guelph-maps">More Guelph layers</a>
 </footer>
 
 </main>
