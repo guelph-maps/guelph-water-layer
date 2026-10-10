@@ -114,7 +114,7 @@ at least 100 m of unnamed line is listed; at 95% it is "wholly unnamed".
 It runs one way only, City → OSM. OSM's private ponds and natural water that
 the City does not inventory are not reported.
 
-### First run, 2026-10-09 (OSM base 2026-10-10 00:00Z)
+### First run, 2026-10-09 (OSM base 2026-10-10 00:08Z)
 
 | status | count |
 |---|--:|
