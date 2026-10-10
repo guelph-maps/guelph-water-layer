@@ -1,105 +1,130 @@
-# Guelph Parks Layer
+# Guelph Water Layer
 
-Turns the City of Guelph [Park Boundary](https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData1/FeatureServer/5)
-layer (126 park polygons) into map-tile layers that OpenStreetMap mappers can
-add to the **JOSM** and **iD** editors as a reference overlay.
+Turns the City of Guelph's
+[Stormwater Management Pond](https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData2/FeatureServer/10)
+layer (93 basins kept of 152 rows) and its
+[Watercourse Polygons](https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData1/FeatureServer/15)
+(71 creek corridors, 13 named) into map-tile layers that OpenStreetMap mappers
+can add to the **JOSM** and **iD** editors as a reference overlay, plus a
+weekly page of what OSM is missing.
 
-**Live layer and how to add it: https://guelph-maps.github.io/guelph-parks-layer/**
+**Live layer and how to add it: https://guelph-maps.github.io/guelph-water-layer/**
 
 Part of the [guelph-maps](https://github.com/guelph-maps) organisation, which
-indexes every Guelph project. Its sibling layer is
-[guelph-address-layer](https://github.com/guelph-maps/guelph-address-layer)
-([live](https://guelph-maps.github.io/guelph-address-layer/)): the City's
-address points, rendered as house-number labels, from the same organisation.
-
-It is a sibling of
-[toronto-parks-layer](https://github.com/skfd/toronto-parks-layer), which is the
-template this was cloned from: the same `download -> slim -> compare -> vector
--> raster -> site -> publish` pipeline, pointed at Guelph's park boundaries.
-A person who knows one project knows the other; the only step that differs in
-substance is `download`, because Guelph publishes an ArcGIS FeatureServer where
-Toronto publishes a static file on CKAN.
+indexes every Guelph project. It was cloned from
+[guelph-parks-layer](https://github.com/guelph-maps/guelph-parks-layer): the
+same `download -> slim -> compare -> vector -> raster -> site -> publish`
+pipeline, pointed at two layers instead of one.
 
 The audit behind it is
 [`guelph-osm-import-audit`](https://github.com/guelph-maps/guelph-osm-import-audit)
-(private), `findings/parks-recreation.md`,
-which tiered this layer **4 / conflate**: OSM already has the parks, what the
-City has that OSM lacks is the **official current names** — including the
-Anishinaabemowin renaming *Mkinaak Donjibaa Park* — plus a handful of genuinely
-absent polygons. That is a gap page, not an import.
-[guelph-pitches-beholder](https://github.com/guelph-maps/guelph-pitches-beholder)
-tracks the courts and sports fields inside these same parks against OSM —
-the same audit finding, tiered 4 / conflate.
+(private), `findings/recalibration.md`, section *Water*, which tiered the
+basins **4 / conflate** and folded the creek names in as one status rather
+than a project of their own.
 
 ## What it produces
 
-- **Vector tiles** (MVT) &mdash; interactive in iD; click a polygon to read its
-  `name`, `address` and `objectid` tags.
-- **Raster tiles** (PNG) &mdash; translucent green fills with park-name labels;
-  each park's outline and label share a stable hashed colour so a name
-  overhanging a small polygon is still visually tied to it. A readable backdrop
-  for JOSM. A name only renders once the polygon is a visible shape on screen,
-  so big parks are labelled from city zoom and small parkettes only when zoomed
-  in; at the top raster zoom every named park is labelled.
+- **Vector tiles** (MVT), z10–19, in two layers: `basins` (click one in iD to
+  read `kind`, `type`, `area`, `fenced`, `installyear`, `ownedby`, `locdesc`,
+  `plan`, `objectid`, `swmpondid`) and `watercourses` (`name` where the City
+  has one).
+- **Raster tiles** (PNG), z13–17: a **wet pond** is solid translucent blue; a
+  **dry or infiltration basin** is paler blue under diagonal hatching — a grass
+  hollow that holds water only after a storm; a **constructed wetland** is
+  teal. Creek corridors are a faint grey-blue wash, labelled with the City's
+  creek name. Basins carry no label (see *What is kept*).
 - A **landing page** with copy-paste "add this layer" instructions for both
-  editors.
-- A **gap-review page** ([`/gaps/`](https://guelph-maps.github.io/guelph-parks-layer/gaps/))
-  that compares the City polygons against park areas already in OpenStreetMap
-  and lists the gaps &mdash; City parks with no overlapping OSM area
-  ("missing"), matched parks whose OSM name differs ("mismatch"), and matched
-  parks whose OSM area carries no name at all ("unnamed") &mdash; on an
-  interactive map and a filterable table. OSM areas are pulled from Overpass;
-  matching is by spatial overlap (see [`src/compare.py`](src/compare.py)). Its
-  [history page](https://guelph-maps.github.io/guelph-parks-layer/gaps/history.html)
-  charts those counts over time, one point per weekly run.
+  editors, and a box on which tag suits which kind of basin.
+- A **gap-review page** ([`/gaps/`](https://guelph-maps.github.io/guelph-water-layer/gaps/))
+  with an interactive map and a filterable table, in five statuses:
+  - **missing** — no OSM water, wetland or basin area matches the basin: draw it;
+  - **plain water** (`unclassified`) — OSM has it as a bare `natural=water`,
+    `water=pond`, `water=reservoir` or a natural wetland: retag it;
+  - **creek unnamed** (`creek_unnamed`) — a creek the City names whose OSM
+    waterway lines carry no name: add `name=`;
+  - **wetland** — a City constructed wetland that OSM has something on. Kept
+    apart: how a stormwater wetland should be tagged is not settled, so
+    nothing is suggested. Off by default;
+  - **tagged as basin** (`classified`) — done, in either scheme. Off by default.
+
+  Its [history page](https://guelph-maps.github.io/guelph-water-layer/gaps/history.html)
+  charts missing, plain water and creeks unnamed, one point per weekly run.
 
 All of it is published to GitHub Pages and rebuilt weekly.
 
 ## What is kept
 
-**Every park the City publishes as in use.** Toronto's slim step filters on
-`AREA_CLASS`, because its Green Spaces dataset mixes traffic islands, road
-slivers, boulevards and hydro corridors in with the parks. Guelph's layer has
-no class field, and does not need one: it is parks and nothing else. The
-analogous categorical filter here is **`ParkStatus`** (`INCLUDE_PARK_STATUS` in
-[`src/config.py`](src/config.py)), which keeps `IN-USE` and drops anything
-retired, proposed or planned.
+**Basins.** The 152 rows include things that are not basins. Dropped
+(`DROP_TYPES`, `MIN_AREA_M2` in [`src/config.py`](src/config.py)): 37
+**Greenway** swales (grassed ditches along lot lines), one buried **Rock Trench
+Storage**, 7 rows with **no TYPE**, and 14 basins **under 500 m²** —
+infiltration galleries too small to see on imagery. 93 remain. Each gets a
+`kind` from its `TYPE`: *Wet* and *Wet with Infiltration Basin* → `wet`; *Dry*,
+*Dry - Online*, *Dry with Infiltration* → `dry`; *Infiltration*, *Infiltration
+- Online* → `infiltration`; *Wetland* → `wetland`. A TYPE the City adds later
+stops the slim step until someone decides which it is.
 
-Be clear about what that rule does today: **nothing**. All 126 rows are
-`IN-USE`; the City removes a closed park from the extract rather than flagging
-it, so the field currently carries no information at all. The rule is written
-down anyway, because the day a `RETIRED` or `PROPOSED` value does appear, the
-alternative is an overlay telling mappers to add a park that has been
-decommissioned or not yet built.
+**The City's `NAME` is not a name.** It is the subdivision plan the basin was
+built under (`Plan 680 - Hanlon Industrial Park - Phase 2`). It is kept, as
+`plan`, because it helps find the basin in City documents — but never as
+`name`, never as a tile label, and the gap page never suggests it.
 
-**Names come from `Name`, not `ParkName`.** This is the one trap in the
-dataset, and the obvious field is the wrong one. `ParkName` is ALL CAPS
-(`LEWIS FARM PARK`); `Name` (service alias "Name of Facility") is the same name
-already cased for OSM (`Lewis Farm Park`). So, unlike the Toronto sibling,
-there is **no title-casing step here** — see `NAME_KEY` in
-[`src/config.py`](src/config.py).
+**Creeks** are the opposite case: `COMMON_NAME` on a watercourse polygon *is* a
+real name (`Torrance Creek`), and it is exactly what the gap page suggests.
+Every watercourse polygon is drawn; the 13 named ones (12 names — Guelph Lake
+is two polygons) are compared.
 
-The City's own casing is not perfect, and a mapper should not copy it blindly:
-`O'connor Lane Park`, `I.o.d.e. Fountain`, `W.e. Hamilton Park`,
-`John Mccrae Memorial Gardens`, `Macalister Park`,
-`Priory Park (blacksmith Fntn)`. These are shown as the City publishes them —
-the layer is a reference, and inventing a correction would be a worse lie than
-showing the wart.
+## How the gap page matches
 
-The single polygon named `Unnamed Neighbourhood Park` is kept out of the
-rendered tile layer (that is a placeholder, not a name, and an overlay that
-draws it invites someone to type it into OSM). The slim step writes it to
-`parks-slim.geojsonl` but not to `parks-layer.geojsonl`, so the gap-review page
-still tracks it under its own `placeholder` category while the tiles do not.
-This is the exact role Toronto's numbered `TRCA LANDS (  n)` parcels play there.
+One Overpass query pulls every `natural=water|wetland`, `landuse=basin|reservoir`
+and `basin=*` area and every `waterway=river|stream|canal|ditch|drain` line in
+the Guelph bbox. Geometry is compared in UTM 17N with shapely.
 
-One caution the audit raised and this layer cannot settle: the City's polygon
-is the **parcel it owns**, which routinely includes a road allowance, a
-stormwater block or a walkway easement nobody would call part of the park.
-OSM's existing polygons were traced from imagery and follow the visible edge.
-Where the two disagree, OSM's is often the better `leisure=park`. Use this
-layer for names and for finding absent parks; do not replace geometry from it
-without overlaying a sample first.
+**Basins.** An OSM area matches a City basin when it overlaps at least **10% of
+the smaller** of the two, or either one's representative point lies inside
+the other. Measured on 2026-10-09: 10%, 30% and 50% all give the same 33
+missing, so the rule is not on a knife edge. Two things are left out on
+purpose:
+
+- **`water=river` is never a candidate** (nor the old `waterway=riverbank`).
+  Creek-side basins touch the river multipolygon; with any-intersection that
+  alone turns 33 missing into 17.
+- **Both basin schemes count as classified.** Guelph's mapped wet ponds use
+  `natural=water` + `water=basin`; the usual tag for a dry basin is
+  `landuse=basin` + `basin=detention|infiltration`. A test that only looked for
+  water would report a correctly mapped dry basin as missing.
+
+When several OSM areas match, a classified one wins, then the biggest overlap.
+
+| City kind | Suggested tags |
+|---|---|
+| wet | `natural=water` + `water=basin` (+ `basin=retention`) |
+| dry | `landuse=basin` + `basin=detention` |
+| infiltration | `landuse=basin` + `basin=infiltration` |
+| wetland | not settled — leave what is there |
+
+**Creeks.** OSM draws a creek as a line, so the City's watercourse *polygon* is
+never compared with OSM polygons (that reports a phantom gap on nearly every
+creek). Instead each named corridor is grown 5 m and the OSM waterway lines in
+it are measured. A way counts when it runs at least 20 m inside, and either
+mostly inside or for 50 m — without that, the Speed River showed 394 m
+"unnamed", all of it fourteen tributaries' last few dozen metres. A creek with
+at least 100 m of unnamed line is listed; at 95% it is "wholly unnamed".
+
+It runs one way only, City → OSM. OSM's private ponds and natural water that
+the City does not inventory are not reported.
+
+### First run, 2026-10-09 (OSM base 2026-10-10 00:00Z)
+
+| status | count |
+|---|--:|
+| missing | 33 (23 dry/infiltration, 9 wet, 1 wetland) |
+| plain water | 50 |
+| tagged as basin | 7 |
+| wetland | 3 |
+| creek unnamed | 7 — Willow West 3,273 m, Torrance 2,643 m, Arboretum 991 m wholly; Marden 767 m, Hadati 650 m, Eramosa 435 m, Hanlon 300 m partly |
+
+The recalibration's numbers, reproduced.
 
 ## Setup
 
@@ -107,187 +132,124 @@ without overlaying a sample first.
    ```
    pip install -r requirements.txt
    ```
+   Unlike the parks and buildings siblings this one needs **shapely** and
+   **pyproj**: overlap areas and line lengths inside a corridor are not worth
+   writing by hand.
 2. Set up WSL2 + tippecanoe once &mdash; see [wsl-setup.md](wsl-setup.md).
-3. Confirm the GitHub repo in `src/config.py` (`GITHUB_REPO`, `PAGES_URL`).
 
 ## Usage
 
 ```
-python run.py download   # fetch the latest Park Boundary GeoJSON (smart-cached)
-python run.py slim       # filter to in-use parks -> slim GeoJSONL
-python run.py compare    # diff City polygons against OSM -> data/gaps.geojson
-python run.py backfill   # one-off: reconstruct past weeks' gap counts from OSM history
+python run.py download   # fetch both layers (each smart-cached on its own)
+python run.py slim       # keep the basins and watercourses -> slim GeoJSONL
+python run.py compare    # diff against OSM -> data/gaps.geojson
+python run.py backfill   # one-off: reconstruct past weeks' counts from OSM history
 python run.py vector     # build vector (MVT) tiles via WSL tippecanoe
-python run.py raster     # build labelled raster (PNG) tiles
-python run.py site       # render the landing page (+ the gap-review page)
+python run.py raster     # build raster (PNG) tiles
+python run.py site       # render the landing page (+ the gap pages)
 python run.py publish    # force-push the site to the gh-pages branch
 
 python run.py build      # download + slim + compare + vector + raster + site
 python run.py update     # build + publish  (the scheduled entry point)
 ```
 
-Build output lands in `build/site/`; that directory is what gets published.
+## The source
 
-## The source, and why `download` is the only rewritten step
+Both layers are ArcGIS FeatureServer queries
+(`.../query?where=1%3D1&outFields=*&outSR=4326&f=geojson`); `outSR=4326` is not
+optional, since the services store EPSG:26917. A `/query` reply has no
+meaningful `Last-Modified`, so each layer is cached on a **sha256 of the body**
+with its own sidecar (`data/.last-download-<key>.json`); an unchanged hash keeps
+the existing dated file, so the page's "City data" date means *when the basin
+data last changed*.
 
-Toronto downloads one static GeoJSON from a CKAN package and smart-caches it on
-a HEAD request: `Last-Modified` plus `Content-Length` against a small JSON
-sidecar. Guelph publishes an **ArcGIS FeatureServer**, and a `/query` response
-has neither of those to offer — it is generated the moment you ask, so its
-`Last-Modified` is the time of your own request.
-
-So the cache key changes and nothing else does. The query is
-
-```
-.../FeatureServer/5/query?where=1%3D1&outFields=*&outSR=4326&f=geojson
-```
-
-`outSR=4326` is not optional: the service stores geometry in EPSG:26917 (UTM
-17N, metres), and without it every downstream coordinate is nonsense. The body
-is ~330 KB, cheap enough to fetch every time, and what is compared is a
-**sha256 of the response**. An identical hash means the City has not touched the
-layer and the existing dated file is kept — which also keeps the site's "City
-data" date meaning *when the data last changed*, exactly as Toronto's
-`Last-Modified` filename does.
-
-The output contract is unchanged: one dated GeoJSON FeatureCollection in
-`data/`, which is all `slim` and everything after it knows about.
-
-Two ArcGIS-specific checks sit on the response, because this service answers
-with HTTP 200 whatever it thinks of your request: a body carrying an `error`
-object is refused, and so is one with `exceededTransferLimit` set. The layer's
-`maxRecordCount` is 100,000 against 126 rows, so a truncated page cannot happen
-today — but a partial extract would report the parks that fell off the end as
-missing from OSM, and that is worth stopping the run for rather than quietly
-paginating around.
+The service answers errors and truncation with HTTP 200, so a body carrying
+`error` or `exceededTransferLimit` is refused. The basins sit on **OpenData2**,
+whose `maxRecordCount` is **1,000** (OpenData1's is 100,000); 152 rows fit, so
+a truncated reply stops the run rather than being paginated around — a partial
+extract would report the basins that fell off the end as missing.
 
 ## Tile endpoints
 
 ```
-https://guelph-maps.github.io/guelph-parks-layer/tiles/vector/{z}/{x}/{y}.pbf   (z10-19)
-https://guelph-maps.github.io/guelph-parks-layer/tiles/raster/{z}/{x}/{y}.png   (z13-17)
+https://guelph-maps.github.io/guelph-water-layer/tiles/vector/{z}/{x}/{y}.pbf   (z10-19)
+https://guelph-maps.github.io/guelph-water-layer/tiles/raster/{z}/{x}/{y}.png   (z13-17)
 ```
 
-The vector layer name is `parks`.
+Vector layers: `basins`, `watercourses`.
 
 ## Hosting
 
-The tile pyramid is published to an orphan `gh-pages` branch, recreated and
-force-pushed on every build so repository history never grows. One-time step:
-in the GitHub repo, set **Settings &rarr; Pages &rarr; Source** to the
-`gh-pages` branch (root).
+The site is published to an orphan `gh-pages` branch, recreated and
+force-pushed on every build so repository history never grows. Pages serves
+that branch (root).
 
 ## Scheduling (Windows)
 
 Run as Administrator:
 
 ```powershell
-.\schedule-add.ps1      # registers a weekly task "kk-GuelphParksLayer", Tuesdays 16:30
+.\schedule-add.ps1      # registers a weekly task "kk-GuelphWaterLayer", Mondays 19:30
 .\schedule-remove.ps1   # unregisters it
 ```
 
-Weekly is enough &mdash; 126 park polygons change rarely, and the City's service
-carries no edit date to poll anyway; it is the gap page, which diffs against
-live OSM, that moves week to week. Tuesday keeps this clear of
-`toronto-parks-layer`'s Monday slot, so the two never drive tippecanoe in the
+Weekly is enough: the City adds about one basin a year, and it is the gap
+page, diffed against live OSM, that moves week to week. The 16:30 band is full
+(one sibling layer a day), so this opens the second band at 19:30 — three
+hours clear of Monday's 16:30 run, so two builds never drive tippecanoe in the
 same WSL instance at once.
 
 ### The link gate
 
-Both network steps &mdash; the dataset query and the `gh-pages` push &mdash;
-run behind `addressvault.net`, the same offline/metered gate the address vault
-pulls behind. A dead link is not a build failure: `run.py` exits **75**
-(`EX_TEMPFAIL`), nothing is written, and the task's restart-on-failure retries
-three times half an hour apart rather than leaving a seven-day gap. It does not
-wait the link out, since the task carries a hard `ExecutionTimeLimit` that would
-kill a long wait anyway.
-
-### Gap history
-
-Every live comparison appends one line to `data/history.jsonl` -- the date, the
-OSM data date, and the missing / mismatch / unnamed / placeholder counts -- and
-the site step charts it at [`/gaps/history.html`](https://guelph-maps.github.io/guelph-parks-layer/gaps/history.html),
-with the rows published beside it as `gaps/history.jsonl`. That is the whole
-record the observer keeps: the tiles and the gap list are rebuilt from scratch
-and force-pushed each week, but this file only grows, so the scheduled
-`update` extends the chart by one point every Tuesday. A run that fell back to
-cached OSM is not recorded; it observed nothing new, and a point it drew would
-be a false plateau. A live row's OSM date is the mirror's declared
-`timestamp_osm_base`, so a mirror answering with old data shows as such.
-
-Nothing heavier is kept on purpose. OSM keeps its own history, so the record is
-reconstructible: `python run.py backfill` asks `overpass-api.de` what OSM looked
-like on each past Monday (an attic query, `[date:...]`, which only that
-instance is relied on for) and re-runs the comparison against it, adding rows
-marked `attic`. It is paced -- one attempt per date, 30 s between dates, and
-it stops at the first unanswered query -- because attic queries cost the
-instance more than live ones and this is a one-off, not the weekly build. Dates
-already on record are skipped, so an interrupted run resumes when re-run.
-The default range starts 2026-06-01, the same Monday the Toronto sibling's
-chart starts on; `--since`, `--until`, `--every` and `--pause` adjust it.
-
-Two caveats the page states: a reconstructed week is compared against
-*today's* City polygons (the City side is not archived; the Park Boundary layer
-changes rarely), and the counts follow the City layer, so they move when the
-City adds or renames parks, not only when someone maps one.
-
-A checkout without `data/history.jsonl` (a fresh clone, a wiped `data/`) seeds
-itself from the published `gaps/history.jsonl` before recording, so the record
-survives the machine it was made on.
+Both network steps &mdash; the dataset queries and the `gh-pages` push &mdash;
+run behind `addressvault.net`. A dead link is not a build failure: `run.py`
+exits **75** (`EX_TEMPFAIL`), nothing is written, and the task's
+restart-on-failure retries three times half an hour apart.
 
 ### Keeping the OSM half fresh
 
-The gap page is only worth acting on if both sides of the diff are current, and
-the OSM side is the one that moves daily. Every mirror in `OVERPASS_URLS` is
-tried, and the whole list is retried `OVERPASS_ROUNDS` times a minute apart,
-because what is being worked around is a loaded instance shedding one request.
-A reply with fewer than `OSM_MIN_ELEMENTS` elements is refused however healthy
-its status code: a regional instance answers an out-of-region bbox with a
-valid, empty result, which taken at face value would report all 126 City parks
-as missing from OSM.
+Every mirror in `OVERPASS_URLS` is tried, and the whole list is retried
+`OVERPASS_ROUNDS` times a minute apart. A reply is refused, however healthy its
+status code, when it has fewer than `OSM_MIN_ELEMENTS` (600; the first live
+reply had 1,259) elements, when it does not state its `timestamp_osm_base`, or
+when that base is more than `OSM_MAX_AGE_DAYS` (3) old.
+`overpass.private.coffee` and `overpass.kumi.systems` are not in the list:
+during the 2026-10-09 recalibration private.coffee answered this very query
+with HTTP 200 and OSM from 2026-06-01.
 
-`overpass.kumi.systems` is deliberately **not** in the list. It returned 504s
-through August 2026 and has since been caught serving months-stale data, which
-is the worse of the two failures because it looks exactly like success.
-`overpass.private.coffee` was dropped on 2026-09-29 for the same failure: the
-Toronto sibling caught it serving OSM from May and July on consecutive days.
-That leaves `overpass-api.de` alone, and a reply from any mirror whose data is
-more than `OSM_MAX_AGE_DAYS` (3) old is refused like a 504.
+The page prints the OSM database timestamp the mirror declares about its own
+reply, not the build date. If no mirror answers, the cache is used, the page
+carries a warning banner, and `update` exits **70** *after* publishing so the
+scheduler retries the fetch in half an hour.
 
-The page prints the **OSM database timestamp the mirror declares about its own
-reply** (`osm3s.timestamp_osm_base`), not the date of the build — a mirror can
-answer in two seconds with data from last week, and printing "today" beside it
-would hide precisely that.
+### Gap history
 
-If no mirror can be reached, the cache is used &mdash; a stale gap page beats
-none &mdash; but the run stops being quiet about it. The page carries a warning
-banner beside the OSM date, and `update` exits **70** *after* publishing, so the
-tiles still ship and the task's restart-on-failure tries the fetch again in half
-an hour instead of in a week. Being offline is told apart from an Overpass
-outage and stays a 75.
+Every live comparison appends one line to `data/history.jsonl`, charted at
+[`/gaps/history.html`](https://guelph-maps.github.io/guelph-water-layer/gaps/history.html)
+and published beside it as `gaps/history.jsonl`, which re-seeds a checkout
+without one. A run on cached OSM is not recorded. `python run.py backfill`
+reconstructs past Mondays from overpass-api.de attic queries, paced and
+resumable — it has not been run: the recalibration's attic queries ran out of
+memory on a query this size.
 
 ## Tests
 
 ```
-python tests\test_tilemath.py
-python tests\test_slim.py
-pytest                       # the above, plus the download / compare / publish tests
+pytest
 ```
 
 ## Licence / attribution
 
-Park data is &copy; City of Guelph, published under the
+Basin and watercourse data is &copy; City of Guelph, published under the
 [Open Government Licence &ndash; City of Guelph](https://gismaps.guelph.ca/Images/OpenDataLicenceVersion2.pdf).
 The OSMF Licence Working Group approved that licence as `compatible` on
 2024-09-09.
 
-**This project redistributes City data** — as published tiles on a public URL —
-which the sibling *beholder* products never do, and the licence attaches a
-required attribution to that. Both the landing page and the gap page carry,
-visibly:
+**This project redistributes City data** as published tiles on a public URL,
+and the licence attaches a required attribution to that. The landing page, the
+gap page and the history page carry, visibly:
 
 > Contains information licensed under the Open Government Licence – City of Guelph.
 
 linked to the licence text. The same attribution is embedded in the vector tile
-metadata. This is a condition of use, not a courtesy: if you fork this, the
-notice travels with it.
+metadata. If you fork this, the notice travels with it.
