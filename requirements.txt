@@ -1,4 +1,6 @@
 addressvault
 requests
 Pillow
-ijson
+numpy
+shapely>=2.0
+pyproj

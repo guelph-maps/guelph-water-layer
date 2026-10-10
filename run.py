@@ -1,4 +1,4 @@
-"""CLI entry point for the Guelph parks tile layer build."""
+"""CLI entry point for the Guelph water tile layer build."""
 
 import argparse
 import os
@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from addressvault import LinkUnavailable
 
 from src import config
-from src.download import download
+from src.download import download_all
 from src.slim import slim
 from src.compare import compare
 from src.history import backfill
@@ -40,13 +40,13 @@ def _banner(text):
 
 def cmd_download(args):
     _banner("Download")
-    status, path = download(force=args.force)
-    print(f"{status}: {path}")
+    for key, (status, path) in download_all(force=args.force).items():
+        print(f"{key}: {status}: {path}")
 
 
 def cmd_slim(args):
     _banner("Slim")
-    slim(_latest_geojson())
+    slim(_latest_geojson("basins"), _latest_geojson("creeks"))
 
 
 def cmd_compare(args):
@@ -56,8 +56,8 @@ def cmd_compare(args):
 
 def cmd_backfill(args):
     _banner("Backfill gap history")
-    if not os.path.isfile(config.SLIM_PATH):
-        raise RuntimeError("No slim parks file. Run 'download' and 'slim' first.")
+    if not os.path.isfile(config.BASINS_SLIM_PATH):
+        raise RuntimeError("No slim basins file. Run 'download' and 'slim' first.")
     until = date.fromisoformat(args.until) if args.until else date.today()
     added = backfill(date.fromisoformat(args.since), until, args.every, args.pause)
     print(f"Added {added} row(s) to {config.HISTORY_PATH}")
@@ -120,36 +120,37 @@ def cmd_update(args):
         sys.exit(EXIT_OSM_STALE)
 
 
-def _latest_geojson():
-    """Return the newest downloaded Park Boundary GeoJSON in data/."""
+def _latest_geojson(key):
+    """Return the newest downloaded GeoJSON of one source in data/."""
     if not os.path.isdir(config.DATA_DIR):
         raise RuntimeError("No data/ directory. Run 'download' first.")
+    source = config.SOURCES[key]
     files = sorted(
         f for f in os.listdir(config.DATA_DIR)
-        if f.startswith("park-boundary-") and f.endswith(".geojson")
+        if f.startswith(source["prefix"]) and f.endswith(".geojson")
     )
     if not files:
-        raise RuntimeError("No Park Boundary GeoJSON in data/. Run 'download' first.")
+        raise RuntimeError(f"No {source['label']} GeoJSON in data/. Run 'download' first.")
     return os.path.join(config.DATA_DIR, files[-1])
 
 
 COMMANDS = {
-    "download": (cmd_download, "Download the latest Park Boundary GeoJSON"),
-    "slim": (cmd_slim, "Filter parks into slim GeoJSONL"),
+    "download": (cmd_download, "Download the latest basin and watercourse GeoJSON"),
+    "slim": (cmd_slim, "Filter basins and watercourses into slim GeoJSONL"),
     "compare": (cmd_compare, "Compare City polygons against OSM -> gaps.geojson"),
     "backfill": (cmd_backfill, "Reconstruct past gap counts from OSM history"),
     "vector": (cmd_vector, "Build vector (MVT) tiles via WSL tippecanoe"),
     "raster": (cmd_raster, "Build labelled raster (PNG) tiles"),
     "site": (cmd_site, "Render the GitHub Pages landing page"),
     "publish": (cmd_publish, "Force-push the site to the gh-pages branch"),
-    "build": (cmd_build, "download + slim + vector + raster + site"),
+    "build": (cmd_build, "download + slim + compare + vector + raster + site"),
     "update": (cmd_update, "build + publish (scheduled-task entry point)"),
 }
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Guelph Parks Tile Layer builder"
+        description="Guelph Water Tile Layer builder"
     )
     sub = parser.add_subparsers(dest="command")
     for name, (_, help_text) in COMMANDS.items():

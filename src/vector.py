@@ -12,28 +12,30 @@ from src import config
 
 # tile-join writes thousands of small files; doing that on the WSL filesystem
 # and copying the tree out afterwards is far faster than writing onto /mnt/c.
-WSL_PBF_DIR = "/tmp/guelph-parks-vector-tiles"
+WSL_PBF_DIR = "/tmp/guelph-water-vector-tiles"
 
 
-def build_vector(slim_path=None):
+def build_vector():
     """Run tippecanoe + tile-join, producing build/site/tiles/vector/{z}/{x}/{y}.pbf.
 
-    Returns the number of .pbf files produced.
+    Two layers in one tileset: ``basins`` and ``watercourses``, so an iD user
+    can switch the creek corridors off. Returns the number of .pbf files.
     """
-    slim_path = slim_path or config.LAYER_SLIM_PATH
-    if not os.path.isfile(slim_path):
-        raise RuntimeError(f"Slim GeoJSONL not found: {slim_path}. Run 'slim' first.")
+    for path in (config.BASINS_SLIM_PATH, config.CREEKS_SLIM_PATH):
+        if not os.path.isfile(path):
+            raise RuntimeError(f"Slim GeoJSONL not found: {path}. Run 'slim' first.")
     os.makedirs(config.BUILD_DIR, exist_ok=True)
 
-    slim_wsl = win_to_wsl(slim_path)
     mbtiles_wsl = win_to_wsl(config.MBTILES_PATH)
 
     tippecanoe = (
         f"tippecanoe -o '{mbtiles_wsl}' "
         f"-Z{config.VECTOR_MINZOOM} -z{config.VECTOR_MAXZOOM} "
         f"--no-tile-size-limit --no-feature-limit "
-        f"-l {config.VECTOR_LAYER_NAME} -n 'Guelph Parks (Park Boundary)' "
-        f"-A '{config.ATTRIBUTION}' --force '{slim_wsl}'"
+        f"-L '{config.VECTOR_BASINS_LAYER}:{win_to_wsl(config.BASINS_SLIM_PATH)}' "
+        f"-L '{config.VECTOR_CREEKS_LAYER}:{win_to_wsl(config.CREEKS_SLIM_PATH)}' "
+        f"-n 'Guelph Stormwater Basins and Watercourses' "
+        f"-A '{config.ATTRIBUTION}' --force"
     )
     print("Running tippecanoe ...")
     stderr = _wsl(tippecanoe)

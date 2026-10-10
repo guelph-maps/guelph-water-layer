@@ -9,10 +9,10 @@ so the chart never shows a false plateau.
 The record is deliberately tiny and reconstructible. OSM keeps its own history,
 so a lost file is rebuilt with ``backfill``, which asks Overpass what OSM
 looked like on each past Monday and re-runs the comparison against it. That is
-why nothing heavier -- the Overpass replies, the per-park verdicts -- is kept.
+why nothing heavier -- the Overpass replies, the per-basin verdicts -- is kept.
 The one caveat: a reconstructed week uses today's City polygons, since the City
-side is not archived; the Park Boundary layer changes rarely, and the page
-says which points are reconstructed.
+side is not archived; the City adds about one basin a year, and the page says
+which points are reconstructed.
 """
 
 import json
@@ -25,7 +25,8 @@ from addressvault import net
 
 from src import config
 
-FIELDS = ("missing", "mismatch", "unnamed", "placeholder", "city", "osm_rings")
+FIELDS = ("missing", "unclassified", "classified", "wetland", "creek_unnamed",
+          "city", "osm_areas")
 
 
 def record(summary, day=None):
@@ -95,7 +96,8 @@ def backfill(since, until, step_days, pause, sleep=time.sleep):
         print("History: nothing to backfill.")
         return 0
     print(f"Backfilling {len(days)} date(s) from {config.ATTIC_URL} ...")
-    city = list(compare._city_features())
+    basins = list(compare.city_basins())
+    creeks = list(compare.city_creeks())
     added = 0
     for i, d in enumerate(days):
         if i:
@@ -106,14 +108,13 @@ def backfill(since, until, step_days, pause, sleep=time.sleep):
         if data is None:
             print("  no answer; stopping. Run backfill again later to resume.")
             break
-        rings = compare._osm_rings(data)
-        _gaps, counts = compare._match(city, rings)
+        _gaps, counts, sizes = compare.match(data, basins, creeks)
         row = {"date": d.isoformat(), "osm_date": d.isoformat(), "source": "attic",
-               "city": len(city), "osm_rings": len(rings), **counts}
+               "city": len(basins), "osm_areas": sizes["osm_areas"], **counts}
         _write(load() + [row])
         added += 1
-        print(f"  {counts['missing']:,} missing, {counts['mismatch']:,} mismatch, "
-              f"{counts['unnamed']:,} unnamed, {counts['placeholder']:,} placeholder")
+        print(f"  {counts['missing']:,} missing, {counts['unclassified']:,} "
+              f"unclassified, {counts['creek_unnamed']:,} creeks unnamed")
     return added
 
 

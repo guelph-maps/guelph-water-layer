@@ -1,117 +1,147 @@
-"""Filter the Park Boundary GeoJSON into a slim newline-delimited GeoJSON.
+"""Filter the two City layers into slim newline-delimited GeoJSON.
 
-The source file is a ~1.5 MB GeoJSON FeatureCollection; it is parsed as a
-stream with ijson for consistency with the sibling projects. Only parks whose
-ParkStatus is included are kept (see config.INCLUDE_PARK_STATUS). Two outputs
-are written, one compact Feature per line: parks-slim.geojsonl (everything
-kept, used by the gap tool) and parks-layer.geojsonl (same minus the
-placeholder-named parks, the input to both tile builders).
+Two outputs, one compact Feature per line:
 
-Unlike toronto-parks-layer there is no title-casing step here: the City already
-publishes a cased name in the "Name" field. See config.NAME_KEY.
+* basins-slim.geojsonl -- the stormwater basins that are basins: TYPE not in
+  config.DROP_TYPES (Greenway swales, the rock trench, rows with no TYPE) and
+  at least config.MIN_AREA_M2 in area. 152 rows -> 93 today. Each carries a
+  derived ``kind`` (wet / dry / infiltration / wetland), which is what the tiles
+  colour by and what the gap page suggests a tag from.
+* watercourses-slim.geojsonl -- every watercourse polygon, with ``name`` where
+  the City gives one (COMMON_NAME; 13 of 71).
+
+The basins' City ``NAME`` is kept, but as ``plan``, never ``name``: it is a
+subdivision-plan label ("Plan 680 - Hanlon Industrial Park - Phase 2"), and an
+overlay that offered it as a name would invite someone to type it into OSM.
+The watercourses' COMMON_NAME is the opposite case -- a real creek name, which
+is exactly what the gap page suggests.
 """
 
 import json
 import os
 
-import ijson
+from pyproj import Transformer
+from shapely.geometry import shape
+from shapely.ops import transform
 
 from src import config
 
-# Sanity bounds for the slimmed feature count (126 park polygons today).
-MIN_EXPECTED = 100
-MAX_EXPECTED = 200
+_to_metres = Transformer.from_crs(4326, config.METRIC_CRS, always_xy=True).transform
 
 
-def slim(src_path):
-    """Stream the GeoJSON into data/parks-slim.geojsonl.
-
-    Keeps Polygon/MultiPolygon features whose ParkStatus is included, with
-    `name`, `address` and `objectid` properties. Returns the slim file path.
-    Raises if the feature count is implausible.
-    """
-    print(f"Slimming {src_path} ...")
+def slim(basins_src, creeks_src):
+    """Write both slim files. Returns (basin_count, watercourse_count)."""
     os.makedirs(config.DATA_DIR, exist_ok=True)
-
-    count = 0
-    layer_count = 0
-    skipped = 0
-    with open(src_path, "rb") as src, \
-            open(config.SLIM_PATH, "w", encoding="utf-8") as out, \
-            open(config.LAYER_SLIM_PATH, "w", encoding="utf-8") as layer_out:
-        for feature in ijson.items(src, "features.item"):
-            props_in = feature.get("properties") or {}
-            if props_in.get(config.STATUS_KEY) not in config.INCLUDE_PARK_STATUS:
-                skipped += 1
-                continue
-            geom = feature.get("geometry") or {}
-            if geom.get("type") not in ("Polygon", "MultiPolygon") \
-                    or not geom.get("coordinates"):
-                skipped += 1
-                continue
-
-            props_out = {}
-            # The cased "Name", not the ALL CAPS "ParkName" -- the obvious
-            # field is the wrong one in this dataset (config.NAME_KEY).
-            name = props_in.get(config.NAME_KEY)
-            if name:
-                props_out["name"] = str(name).strip()
-            address = props_in.get(config.ADDRESS_KEY)
-            if address:
-                props_out["address"] = str(address).strip()
-            # The ArcGIS row id. Shown so a reviewer can find the row again in
-            # the same extract -- it is NOT a stable city identifier the way
-            # Toronto's AREA_ID is, and can renumber when the layer is
-            # republished, so nothing keys on it across runs.
-            objectid = props_in.get(config.OBJECT_ID_KEY)
-            if objectid is not None:
-                props_out["objectid"] = int(objectid)
-
-            line = json.dumps({
-                "type": "Feature",
-                "geometry": {
-                    "type": geom["type"],
-                    "coordinates": _plain(geom["coordinates"]),
-                },
-                "properties": props_out,
-            }) + "\n"
-            out.write(line)
-            count += 1
-            if not is_placeholder(name):
-                layer_out.write(line)
-                layer_count += 1
-            if count % 500 == 0:
-                print(f"  {count:,} features ...")
-
-    # The landing page counts the parks actually rendered, so it excludes the
-    # placeholder-named ones.
+    basins = _slim_basins(basins_src)
+    creeks = _slim_creeks(creeks_src)
+    # The landing page counts the basins actually rendered.
     with open(config.COUNT_PATH, "w", encoding="utf-8") as f:
-        f.write(str(layer_count))
+        f.write(str(basins))
+    return basins, creeks
 
-    print(f"Done: {config.SLIM_PATH} ({count:,} features, {skipped:,} skipped); "
-          f"{config.LAYER_SLIM_PATH} ({layer_count:,} layer features)")
-    if not MIN_EXPECTED <= count <= MAX_EXPECTED:
+
+def _slim_basins(src_path):
+    print(f"Slimming {src_path} ...")
+    kept = 0
+    dropped = {"type": 0, "small": 0, "geometry": 0}
+    with open(config.BASINS_SLIM_PATH, "w", encoding="utf-8") as out:
+        for feature in _features(src_path):
+            p = feature.get("properties") or {}
+            geom = feature.get("geometry") or {}
+            if not _is_polygon(geom):
+                dropped["geometry"] += 1
+                continue
+            btype = p.get("TYPE")
+            if btype in config.DROP_TYPES:
+                dropped["type"] += 1
+                continue
+            if btype not in config.KINDS:
+                raise RuntimeError(
+                    f"Unknown basin TYPE {btype!r} (OBJECTID {p.get('OBJECTID')}). "
+                    f"Add it to config.KINDS or config.DROP_TYPES."
+                )
+            area = area_m2(geom)
+            if area < config.MIN_AREA_M2:
+                dropped["small"] += 1
+                continue
+            props = {
+                "objectid": int(p["OBJECTID"]),
+                "type": btype,
+                "kind": config.KINDS[btype],
+                "area": round(area),
+            }
+            for src_key, key in (("SWMPONDID", "swmpondid"),
+                                 ("INSTALLYEAR", "installyear"),
+                                 ("FENCED", "fenced"),
+                                 ("OWNEDBY", "ownedby"),
+                                 ("LOCDESC", "locdesc"),
+                                 # A plan label, not a name -- see the docstring.
+                                 ("NAME", "plan")):
+                value = p.get(src_key)
+                if value not in (None, ""):
+                    props[key] = value.strip() if isinstance(value, str) else value
+            out.write(_line(geom, props))
+            kept += 1
+
+    print(f"Done: {config.BASINS_SLIM_PATH} ({kept:,} basins; dropped "
+          f"{dropped['type']:,} by type, {dropped['small']:,} under "
+          f"{config.MIN_AREA_M2} m2, {dropped['geometry']:,} without a polygon)")
+    _check_count("basin", kept, config.BASINS_EXPECTED)
+    return kept
+
+
+def _slim_creeks(src_path):
+    print(f"Slimming {src_path} ...")
+    kept = 0
+    with open(config.CREEKS_SLIM_PATH, "w", encoding="utf-8") as out:
+        for feature in _features(src_path):
+            p = feature.get("properties") or {}
+            geom = feature.get("geometry") or {}
+            if not _is_polygon(geom):
+                continue
+            props = {"objectid": int(p["OBJECTID"])}
+            name = (p.get("COMMON_NAME") or "").strip()
+            if name:
+                props["name"] = name
+            out.write(_line(geom, props))
+            kept += 1
+    print(f"Done: {config.CREEKS_SLIM_PATH} ({kept:,} watercourse polygons)")
+    _check_count("watercourse", kept, config.CREEKS_EXPECTED)
+    return kept
+
+
+def area_m2(geom):
+    """Area of a GeoJSON (Multi)Polygon in square metres (UTM 17N)."""
+    return transform(_to_metres, shape(geom).buffer(0)).area
+
+
+def _features(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f).get("features") or []
+
+
+def _is_polygon(geom):
+    return geom.get("type") in ("Polygon", "MultiPolygon") and bool(geom.get("coordinates"))
+
+
+def _line(geom, props):
+    return json.dumps({
+        "type": "Feature",
+        "geometry": {"type": geom["type"], "coordinates": _round(geom["coordinates"])},
+        "properties": props,
+    }) + "\n"
+
+
+def _round(c):
+    if isinstance(c, (int, float)):
+        return round(c, 7)  # ~1 cm; the City's outline, not a simplification
+    return [_round(x) for x in c]
+
+
+def _check_count(what, n, bounds):
+    lo, hi = bounds
+    if not lo <= n <= hi:
         raise RuntimeError(
-            f"Slim feature count {count:,} is outside the expected range "
-            f"{MIN_EXPECTED:,}-{MAX_EXPECTED:,} -- aborting."
+            f"Slim {what} count {n:,} is outside the expected range "
+            f"{lo:,}-{hi:,} -- aborting."
         )
-    return config.SLIM_PATH
-
-
-def is_placeholder(name):
-    """A park whose name is a placeholder ("Unnamed Neighbourhood Park").
-
-    The Guelph analogue of Toronto's numbered "TRCA LANDS ( n)" parcels: the
-    polygon is real, the name is not one, and drawing it on a reference overlay
-    would invite a mapper to type it into OSM. Kept out of the rendered tile
-    layer; the gap tool still sees it via the full slim file and gives it its
-    own category. One row today.
-    """
-    return bool(name) and str(name).strip().lower() in config.PLACEHOLDER_NAMES
-
-
-def _plain(coords):
-    """Recursively convert ijson Decimals to floats for compact json output."""
-    if isinstance(coords, list):
-        return [_plain(c) for c in coords]
-    return float(coords)

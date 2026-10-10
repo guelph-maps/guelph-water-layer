@@ -1,4 +1,8 @@
-"""Download the Guelph Park Boundary GeoJSON from the City's ArcGIS service.
+"""Download the City's basin and watercourse layers from its ArcGIS services.
+
+Two layers, one routine: ``download(key)`` fetches one of config.SOURCES and
+``download_all`` fetches both. What follows is the parks template's reasoning,
+which holds for each layer unchanged.
 
 This is the one step that differs structurally from the toronto-parks-layer
 template. Toronto downloads a static file from CKAN and smart-caches it on a
@@ -7,8 +11,8 @@ Guelph publishes an ArcGIS FeatureServer, and a `/query` endpoint has neither
 of those -- it is generated per request, so Last-Modified is the moment you
 asked and Content-Length varies with nothing but the query.
 
-So the cache key changes and nothing else does. The body is ~1.5 MB, cheap
-enough to fetch every time; what is compared is a **sha256 of the response**.
+So the cache key changes and nothing else does. The bodies are ~0.4 MB and
+~3 MB, cheap enough to fetch every time; what is compared is a **sha256 of the response**.
 Identical hash means the City has not touched the layer, and the existing dated
 file is kept -- which also keeps DATA_DATE meaning "when the City data last
 changed" rather than "when the build last ran", exactly as the Last-Modified
@@ -33,20 +37,25 @@ from addressvault import net
 
 from src import config
 
-# The Park Boundary layer is 126 polygons, ~1.5 MB of GeoJSON -- a retry costs
-# a couple of seconds when the link is healthy and buys back a week when it is
-# not.
+# A few MB of GeoJSON at most -- a retry costs a couple of seconds when the
+# link is healthy and buys back a week when it is not.
 RETRIES = 3
 RETRY_WAIT = 30
 
 
-def download(force=False):
-    """Download the latest Park Boundary GeoJSON.
+def download_all(force=False):
+    """Download every layer in config.SOURCES. Returns {key: (status, path)}."""
+    return {key: download(key, force=force) for key in config.SOURCES}
+
+
+def download(key, force=False):
+    """Download the latest GeoJSON of one layer (a key of config.SOURCES).
 
     Returns (status, filepath) where status is "DOWNLOADED" or "SKIPPED".
     Raises ``net.LinkUnavailable`` when the host has no usable link: nothing was
     attempted, so the caller exits 75 rather than reporting a build failure.
     """
+    source = config.SOURCES[key]
     os.makedirs(config.DATA_DIR, exist_ok=True)
 
     # Ask before doing anything. Offline or metered, nothing below can work, and
@@ -55,29 +64,33 @@ def download(force=False):
     # a wait would be killed mid-sleep -- retrying is the scheduler's job.
     net.wait_for_link(wait=False)
 
-    print("Querying the Park Boundary FeatureServer ...")
-    body = _fetch(config.DATASET_URL)
+    print(f"Querying the {source['label']} FeatureServer ...")
+    body = _fetch(source["url"])
     _check_payload(body)
     digest = hashlib.sha256(body).hexdigest()
 
-    sidecar = _load_sidecar()
+    sidecar = _load_sidecar(key)
     if not force and sidecar and sidecar.get("sha256") == digest:
         existing = os.path.join(config.DATA_DIR, sidecar.get("filename", ""))
         if os.path.isfile(existing):
             print("Unchanged since the last download.")
             return "SKIPPED", existing
 
-    # No server-side edit date exists on this service (the layer has no
-    # editingInfo and no last_edited_date field), so the file is dated by the
-    # day the change was first seen here.
-    filename = f"park-boundary-{date.today().isoformat()}.geojson"
+    # No server-side edit date exists on these services (editingInfo is null on
+    # every Guelph layer), so the file is dated by the day the change was first
+    # seen here.
+    filename = f"{source['prefix']}{date.today().isoformat()}.geojson"
     filepath = os.path.join(config.DATA_DIR, filename)
     with open(filepath, "wb") as f:
         f.write(body)
     print(f"Done: {filepath} ({len(body) // 1024:,} KB)")
 
-    _save_sidecar(digest, len(body), filename)
+    _save_sidecar(key, digest, len(body), filename)
     return "DOWNLOADED", filepath
+
+
+def sidecar_path(key):
+    return os.path.join(config.DATA_DIR, f".last-download-{key}.json")
 
 
 def _fetch(url):
@@ -108,10 +121,10 @@ def _check_payload(body):
     An ArcGIS service answers an error with HTTP 200 and a JSON body carrying an
     ``error`` object, so raise_for_status proves nothing. It also silently
     truncates a page at maxRecordCount and sets ``exceededTransferLimit``; at
-    126 rows against a limit of 100,000 that cannot happen today, so this
-    raises rather than paginating -- a partial extract would report the parks
-    that fell off the end as missing from OSM, and that is worth stopping for,
-    not working around.
+    152 rows against OpenData2's limit of 1,000 that cannot happen today, so
+    this raises rather than paginating -- a partial extract would report the
+    basins that fell off the end as missing from OSM, and that is worth
+    stopping for, not working around.
     """
     try:
         doc = json.loads(body)
@@ -133,15 +146,15 @@ def _check_payload(body):
         raise RuntimeError("The service returned an empty FeatureCollection.")
 
 
-def _load_sidecar():
-    if os.path.isfile(config.LAST_DOWNLOAD_PATH):
-        with open(config.LAST_DOWNLOAD_PATH, encoding="utf-8") as f:
+def _load_sidecar(key):
+    if os.path.isfile(sidecar_path(key)):
+        with open(sidecar_path(key), encoding="utf-8") as f:
             return json.load(f)
     return None
 
 
-def _save_sidecar(digest, size, filename):
-    with open(config.LAST_DOWNLOAD_PATH, "w", encoding="utf-8") as f:
+def _save_sidecar(key, digest, size, filename):
+    with open(sidecar_path(key), "w", encoding="utf-8") as f:
         json.dump(
             {"sha256": digest, "bytes": size, "filename": filename}, f, indent=2
         )

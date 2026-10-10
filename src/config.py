@@ -1,13 +1,12 @@
-"""Configuration constants for the Guelph parks tile layer build.
+"""Configuration constants for the Guelph water tile layer build.
 
 Single source of truth. No logic here.
 
-Sibling of toronto-parks-layer: the same pipeline (download -> slim -> compare
--> vector + raster -> site -> publish), pointed at the City of Guelph Park
-Boundary layer instead of Toronto's Green Spaces. The one structural difference
-is the source -- Toronto publishes a static GeoJSON on CKAN, Guelph an ArcGIS
-FeatureServer that has to be queried. Everything downstream of download.py is
-the Toronto code with Guelph constants.
+Sibling of guelph-parks-layer: the same pipeline (download -> slim -> compare
+-> vector + raster -> site -> publish), pointed at two City of Guelph layers at
+once -- the stormwater management basins, which are what the gap page is about,
+and the watercourse polygons, which contribute one status (named creeks whose
+OSM waterway lines carry no name) and a faint backdrop on the raster.
 """
 
 import os
@@ -19,35 +18,48 @@ SITE_DIR = os.path.join(BUILD_DIR, "site")
 ASSETS_DIR = os.path.join(PROJECT_DIR, "assets")
 LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
 
-MBTILES_PATH = os.path.join(BUILD_DIR, "parks.mbtiles")
-SLIM_PATH = os.path.join(DATA_DIR, "parks-slim.geojsonl")
-# Same as SLIM_PATH but without the placeholder-named parks: the rendered tile
-# layer reads this, the gap tool keeps reading the full SLIM_PATH.
-LAYER_SLIM_PATH = os.path.join(DATA_DIR, "parks-layer.geojsonl")
-COUNT_PATH = os.path.join(DATA_DIR, "parks.count")
-LAST_DOWNLOAD_PATH = os.path.join(DATA_DIR, ".last-download.json")
+MBTILES_PATH = os.path.join(BUILD_DIR, "water.mbtiles")
+BASINS_SLIM_PATH = os.path.join(DATA_DIR, "basins-slim.geojsonl")
+CREEKS_SLIM_PATH = os.path.join(DATA_DIR, "watercourses-slim.geojsonl")
+COUNT_PATH = os.path.join(DATA_DIR, "basins.count")
 
 VECTOR_TILE_DIR = os.path.join(SITE_DIR, "tiles", "vector")
 RASTER_TILE_DIR = os.path.join(SITE_DIR, "tiles", "raster")
 
-# Data source: City of Guelph Park Boundary (OpenData1 layer 5), 126 polygons.
-# The service stores geometry in EPSG:26917, so outSR=4326 is not optional --
-# without it the download is in UTM metres and every downstream lon/lat is
-# nonsense. f=geojson makes the service do the Esri-JSON -> GeoJSON conversion.
-FEATURE_SERVER = (
-    "https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData1"
-    "/FeatureServer/5"
-)
-DATASET_URL = (
-    f"{FEATURE_SERVER}/query?where=1%3D1&outFields=*&outSR=4326&f=geojson"
-)
-# The service's own page. Guelph's open-data catalogue has no stable item page
-# for this layer, so the FeatureServer URL is what a reader is pointed at.
-DATASET_PAGE = FEATURE_SERVER
-# This layer REDISTRIBUTES City data as published tiles -- which the beholder
-# products never do -- and the licence attaches a required attribution to that.
-# It is carried on the landing page and the gap page. See the README section
-# "Licence"; it is a condition, not a courtesy.
+_HOST = "https://gismaps.guelph.ca/hosting/rest/services/OpenData"
+
+# Data sources. Both services store geometry in EPSG:26917, so outSR=4326 is
+# not optional -- without it the download is in UTM metres and every downstream
+# lon/lat is nonsense. f=geojson makes the service do the conversion.
+#
+# The basins sit on OpenData2, whose maxRecordCount is 1,000 (OpenData1's is
+# 100,000). 152 rows fit in one reply with room to spare, so download.py keeps
+# the template's refusal of a truncated reply (exceededTransferLimit) rather
+# than paginating; the sidewalks sibling, at 30k rows, had to page.
+SOURCES = {
+    "basins": {
+        "label": "Stormwater Management Pond",
+        "server": f"{_HOST}/OpenData2/FeatureServer/10",
+        "prefix": "swm-ponds-",
+    },
+    "creeks": {
+        "label": "Watercourse Polygons",
+        "server": f"{_HOST}/OpenData1/FeatureServer/15",
+        "prefix": "watercourse-polygons-",
+    },
+}
+# Each source's download sidecar is data/.last-download-<key>.json.
+for _s in SOURCES.values():
+    _s["url"] = f"{_s['server']}/query?where=1%3D1&outFields=*&outSR=4326&f=geojson"
+
+# The service pages. Guelph's open-data catalogue has no stable item page for
+# these layers, so the FeatureServer URL is what a reader is pointed at.
+DATASET_PAGE = SOURCES["basins"]["server"]
+CREEKS_PAGE = SOURCES["creeks"]["server"]
+# This layer REDISTRIBUTES City data as published tiles, and the licence
+# attaches a required attribution to that. It is carried on the landing page
+# and the gap page. See the README section "Licence"; it is a condition, not a
+# courtesy.
 LICENSE_URL = "https://gismaps.guelph.ca/Images/OpenDataLicenceVersion2.pdf"
 LICENSE_NOTICE = (
     "Contains information licensed under the Open Government Licence "
@@ -60,129 +72,135 @@ ATTRIBUTION = (
     "- City of Guelph"
 )
 
-# GitHub Pages target. Update both if the repo/account differs.
-# The Guelph work lives under its own org, not the skfd account the Toronto
-# siblings sit in. PAGES_URL carries NO trailing slash: every tile URL on the
-# site is built as f"{PAGES_URL}/tiles/...", and a trailing slash would emit
-# "...guelph-parks-layer//tiles/...", which is the one thing on the page a
-# reader copies verbatim into their editor.
-GITHUB_REPO = "guelph-maps/guelph-parks-layer"
-PAGES_URL = "https://guelph-maps.github.io/guelph-parks-layer"
+# GitHub Pages target. PAGES_URL carries NO trailing slash: every tile URL on
+# the site is built as f"{PAGES_URL}/tiles/...".
+GITHUB_REPO = "guelph-maps/guelph-water-layer"
+PAGES_URL = "https://guelph-maps.github.io/guelph-water-layer"
 
 # WSL distro that has tippecanoe installed (see wsl-setup.md).
 WSL_DISTRO = "Ubuntu"
 
 # Vector tiles. iD requests tiles at (map zoom - 1) and does NOT overzoom, so
-# tiles must be generated natively through the zooms used for mapping. Parks
-# are large polygons that read well from city-overview zooms, hence z10.
+# tiles must be generated natively through the zooms used for mapping. Two
+# layers, so an iD user can switch the creek corridors off and keep the basins.
 VECTOR_MINZOOM = 10
 VECTOR_MAXZOOM = 19
-VECTOR_LAYER_NAME = "parks"
+VECTOR_BASINS_LAYER = "basins"
+VECTOR_CREEKS_LAYER = "watercourses"
 
-# Raster tiles. Editors overzoom z17 -> z18+. Park name labels are gated by
-# fit (a name renders only when the polygon is big enough on screen), so no
-# separate label-zoom set is needed.
+# Raster tiles. Editors overzoom z17 -> z18+.
 RASTER_ZOOMS = [13, 14, 15, 16, 17]
 
-# ParkStatus values to KEEP -- the Guelph analogue of Toronto's
-# INCLUDE_AREA_CLASSES. Guelph has no class field to filter on (this layer is
-# parks only -- no traffic islands, road slivers or hydro corridors), so the
-# categorical filter is the status field: keep parks in use, drop anything
-# retired, proposed or planned.
-#
-# Today this is a no-op: all 126 rows are IN-USE, and the City drops a closed
-# park from the extract rather than flagging it. The rule is written down so
-# that the day a RETIRED or PROPOSED value does appear, the layer does not
-# start telling mappers to add a park that is decommissioned or not yet built.
-INCLUDE_PARK_STATUS = frozenset({"IN-USE"})
-
-# Source property keys read from the Park Boundary GeoJSON.
-#
-# NAME_KEY is the trap in this dataset. The obvious field is ParkName, and it
-# is the wrong one: it is ALL CAPS ("LEWIS FARM PARK"). "Name" (service alias
-# "Name of Facility") carries the same name already cased for OSM ("Lewis Farm
-# Park"), so unlike the Toronto sibling there is no title_case step here.
-NAME_KEY = "Name"             # title-cased name, e.g. "Lewis Farm Park"
-UPPER_NAME_KEY = "ParkName"   # its ALL CAPS twin -- deliberately NOT used
-ADDRESS_KEY = "Address"       # civic address, e.g. "55 Revell Drive"
-STATUS_KEY = "ParkStatus"     # "IN-USE" on every row today
-OBJECT_ID_KEY = "OBJECTID"    # ArcGIS row id; see the note in slim.py
-
-# A park whose "name" is a placeholder rather than a name. The Guelph analogue
-# of Toronto's numbered "TRCA LANDS ( n)" parcels: a real polygon carrying a
-# string nobody should copy into OSM. One row today.
-PLACEHOLDER_NAMES = frozenset({"unnamed neighbourhood park"})
+# --- What is kept (slim) ---
+# Basin TYPE values that are not basins: a Greenway is a grassed swale along a
+# lot line (37 rows, nothing in OSM to compare them with), a rock trench is
+# buried. Seven rows carry no TYPE at all; with nothing to say what they are,
+# they are dropped too rather than guessed at.
+DROP_TYPES = frozenset({"Greenway", "Rock Trench Storage", None})
+# Below this a "basin" is an infiltration gallery a few metres across -- not a
+# feature a mapper can see on imagery. 14 basin-type rows today.
+MIN_AREA_M2 = 500
+# TYPE -> kind, the four things the tiles and the page tell apart. Wet ponds
+# hold a permanent pool; dry and infiltration basins are grass hollows that
+# fill after a storm; a constructed wetland is its own thing. An unknown TYPE
+# raises in slim.py: the day the City adds one, someone should decide.
+KINDS = {
+    "Wet": "wet",
+    "Wet with Infiltration Basin": "wet",
+    "Dry": "dry",
+    "Dry - Online": "dry",
+    "Dry with Infiltration": "dry",
+    "Infiltration": "infiltration",
+    "Infiltration - Online": "infiltration",
+    "Wetland": "wetland",
+}
+# Sanity bounds on what slim keeps: 93 basins and 71 watercourse polygons today.
+BASINS_EXPECTED = (70, 130)
+CREEKS_EXPECTED = (50, 100)
 
 # --- OSM comparison (gap-review page) ---
-# Park-like areas are pulled from OSM via Overpass and matched against the kept
-# City polygons by spatial overlap; the gaps feed build/site/gaps/.
+# One Overpass query pulls every water, wetland and basin area plus every
+# waterway line in the bbox: one fetch, one freshness check, both comparisons.
 #
 # Mirrors are tried in order, and the whole list is retried a few times: the
 # failure this guards against is a loaded instance shedding a request, not a bad
-# query. overpass.kumi.systems is deliberately absent -- it returned 504s
-# through Aug 2026 and has since been caught serving months-stale data, which is
-# the worse failure of the two because it looks exactly like success.
+# query. overpass.kumi.systems and overpass.private.coffee are deliberately
+# absent: both have been caught serving months-stale data with HTTP 200 --
+# private.coffee answered this very query with a 2026-06-01 base during the
+# 2026-10-09 recalibration. OSM_MAX_AGE_DAYS refuses such a reply from any
+# mirror, and a reply that does not say how old it is is refused too.
 #
-# Measured 2026-09-13 with this exact query, from this laptop:
-#   overpass-api.de   2.1s   200   277 elements
-#
-# overpass.private.coffee was dropped on 2026-09-29 for the same reason. The
-# Toronto sibling caught it answering from a pool of backends months behind:
-# replies on consecutive days carried OSM from 2026-05-06, 07-15 and 07-28,
-# while overpass-api.de was two minutes behind. OSM_MAX_AGE_DAYS refuses such a
-# reply from any mirror; one that is usually stale is worse than none.
+# Measured 2026-10-09 with this exact query, from this laptop:
+#   overpass-api.de   9-27s   200   1,259 elements
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
 )
 OVERPASS_TIMEOUT = 300
 OVERPASS_ROUNDS = 3
 OVERPASS_ROUND_WAIT = 60
-# Floor on a reply's element count. The query returns ~277 for Guelph; anything
-# under about half that is a wrong-region or truncated answer, not a week's
-# mapping. A regional instance answers an out-of-region bbox with a perfectly
-# valid EMPTY result, and taking that at face value reports all 126 City parks
-# as missing from OSM.
-OSM_MIN_ELEMENTS = 120
+# Floor on a reply's element count: about half the first live
+# reply (1,259 once weir and dam lines were left out of the query). A regional instance answers an out-of-region bbox with a valid EMPTY
+# result, and taking that at face value reports every basin as missing.
+OSM_MIN_ELEMENTS = 600
 # Oldest OSM data a reply may carry (its osm3s.timestamp_osm_base) and still be
-# compared against. A healthy instance is minutes behind; a week-old reply is
-# no fresher than the cache it would replace, so it counts as no answer.
+# compared against.
 OSM_MAX_AGE_DAYS = 3
 # Overpass rejects the default requests User-Agent (HTTP 406); identify the tool.
-USER_AGENT = "guelph-parks-layer/0.1 (toronto@comentality.com)"
-# Guelph bounding box (S, W, N, E), verbatim from guelph-beholder's config.toml
-# -- a touch larger than the city. OSM areas outside the city simply match
-# nothing, so a loose box is harmless.
+USER_AGENT = "guelph-water-layer/0.1 (toronto@comentality.com)"
+# Guelph bounding box (S, W, N, E), as in the sibling layers.
 GUELPH_BBOX = (43.46, -80.34, 43.60, -80.14)
 # Guelph city centre; where the preview and gap maps open.
 GUELPH_CENTER = (43.5448, -80.2482)
-# OSM tags treated as a park-like area. Wider than leisure=park on purpose: a
-# City park that OSM has mapped as a garden or a recreation ground is a tagging
-# question, not a missing feature, and belongs in "mismatch", not "missing".
-OSM_AREA_TAGS = {
-    "leisure": ("park", "garden", "nature_reserve", "golf_course", "common"),
-    "landuse": ("cemetery", "recreation_ground"),
-    "amenity": ("grave_yard",),
-}
-OSM_CACHE_PATH = os.path.join(DATA_DIR, "osm-parks.json")
+# Metric CRS for every area and length: UTM 17N, the City's own.
+METRIC_CRS = 26917
+
+# Basin match: an OSM water / wetland / basin area overlapping at least this
+# share of the smaller of the two polygons, or either one's representative
+# point inside the other. Measured 2026-10-09: 10%, 30% and 50% all give the
+# same 33 missing, so the rule is not sitting on a knife edge.
+OVERLAP_SHARE = 0.10
+# water=* values that never count as a basin's OSM twin. Creek-side basins
+# touch the river multipolygon; with any-intersection that alone turned 16
+# missing basins into matches. (waterway=riverbank, its old tag, is excluded
+# in compare.py too.)
+EXCLUDE_WATER = frozenset({"river"})
+
+# Creek names. A City watercourse polygon carrying a COMMON_NAME is compared
+# with the OSM waterway LINES inside it -- never with OSM polygons: OSM draws a
+# creek as a line, and a polygon-against-polygon test reports a phantom gap on
+# nearly every one.
+CREEK_WATERWAYS = ("river", "stream", "canal", "ditch", "drain")
+CREEK_BUFFER_M = 5        # the City polygon is grown this much first
+CREEK_MIN_INSIDE_M = 20   # a way must run at least this far inside it ...
+# ... and either mostly inside, or for a good stretch. Without this a named
+# river picks up every tributary's last 20-40 m where it enters the corridor:
+# the Speed River showed 394 m "unnamed", all of it fourteen tributary mouths.
+CREEK_MIN_SHARE = 0.5
+CREEK_LONG_INSIDE_M = 50
+# A creek is listed when at least this much of its OSM line is unnamed.
+CREEK_MIN_UNNAMED_M = 100
+# ... and called "wholly unnamed" at this share.
+CREEK_WHOLLY_SHARE = 0.95
+
+OSM_CACHE_PATH = os.path.join(DATA_DIR, "osm-water.json")
 # When the cached Overpass reply was fetched, from where, and -- more usefully
-# -- the OSM database timestamp the reply declares about itself. The cache
-# file's own mtime cannot say any of this: a fallback run rewrites nothing.
+# -- the OSM database timestamp the reply declares about itself.
 OSM_FETCH_PATH = os.path.join(DATA_DIR, ".osm-fetch.json")
 GAPS_GEOJSON_PATH = os.path.join(DATA_DIR, "gaps.geojson")
 GAPS_COUNT_PATH = os.path.join(DATA_DIR, "gaps.count.json")
 
 # --- Gap history (trend page) ---
 # One JSON line per live compare run: the gap counts and what they were
-# computed against. It lives in data/ like the rest of the observer's state.
-# The tiles are rebuilt from scratch and force-pushed every week; this file is
-# appended to, and its published copy re-seeds a checkout that has none.
+# computed against. The tiles are rebuilt from scratch and force-pushed every
+# week; this file is appended to, and its published copy re-seeds a checkout
+# that has none.
 HISTORY_PATH = os.path.join(DATA_DIR, "history.jsonl")
 HISTORY_URL = f"{PAGES_URL}/gaps/history.jsonl"
 # Backfill. overpass-api.de keeps OSM's full history and answers the same
-# query for a past instant ([date:...]); the other mirrors do not all carry
-# it, so only this instance is asked. Weekly points, one attempt per date,
-# and a pause between dates -- attic queries are heavier than live ones.
+# query for a past instant ([date:...]). Weekly points, one attempt per date,
+# and a pause between dates -- attic queries are heavier than live ones (the
+# recalibration's ran out of memory on a query of this size).
 ATTIC_URL = "https://overpass-api.de/api/interpreter"
-BACKFILL_SINCE = "2026-06-01"   # a Monday; the Toronto sibling's start, so the charts line up
-BACKFILL_STEP_DAYS = 7          # the weekly schedule's cadence
+BACKFILL_SINCE = "2026-06-01"   # a Monday; the siblings' start, so the charts line up
+BACKFILL_STEP_DAYS = 7
 BACKFILL_PAUSE = 30
