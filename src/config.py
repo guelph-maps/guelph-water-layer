@@ -138,8 +138,8 @@ OVERPASS_URLS = (
 OVERPASS_TIMEOUT = 300
 OVERPASS_ROUNDS = 3
 OVERPASS_ROUND_WAIT = 60
-# Floor on a reply's element count: about half the first live
-# reply (1,259 once weir and dam lines were left out of the query). A regional instance answers an out-of-region bbox with a valid EMPTY
+# Floor on a reply's element count: about half the 1,259 of the first live
+# reply. A regional instance answers an out-of-region bbox with a valid EMPTY
 # result, and taking that at face value reports every basin as missing.
 OSM_MIN_ELEMENTS = 600
 # Oldest OSM data a reply may carry (its osm3s.timestamp_osm_base) and still be
