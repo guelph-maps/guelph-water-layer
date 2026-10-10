@@ -29,7 +29,7 @@ from shapely.ops import polylabel
 from src import config
 from src.tilemath import TILE_SIZE, lonlat_to_pixel
 
-CREEK_FILL = (96, 125, 139, 40)
+CREEK_FILL = (96, 125, 139, 30)
 CREEK_EDGE = (96, 125, 139, 110)
 CREEK_EDGE_WIDTH = 1
 CREEK_LABEL = (55, 71, 79, 255)

@@ -1,7 +1,7 @@
 """Unit tests for the download link gate and the ArcGIS payload checks.
 
-Toronto's equivalent pins a mid-body resume against a 20 MB static file. This
-source is a 1.5 MB generated query, so there is nothing to resume -- what
+Toronto's equivalent pins a mid-body resume against a 20 MB static file. These
+sources are generated queries of a few MB, so there is nothing to resume -- what
 matters here instead is that an ArcGIS service lies with a 200: it answers an
 error, and a truncated page, with the same status code as a good extract.
 """
@@ -19,7 +19,7 @@ from addressvault import net  # noqa: E402
 from src import config, download as dl  # noqa: E402
 
 
-def _collection(n=126, **extra):
+def _collection(n=152, **extra):
     return json.dumps({
         "type": "FeatureCollection",
         "features": [{
@@ -55,9 +55,6 @@ def usable_link(monkeypatch):
 @pytest.fixture
 def data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        config, "LAST_DOWNLOAD_PATH", str(tmp_path / ".last-download.json")
-    )
     return tmp_path
 
 
@@ -78,7 +75,7 @@ def test_a_dead_link_stops_before_any_request(data_dir, monkeypatch):
     monkeypatch.setattr("src.download.requests.get", boom)
 
     with pytest.raises(net.Offline):
-        dl.download()
+        dl.download("basins")
 
 
 def test_a_dropped_query_is_retried(data_dir, monkeypatch):
@@ -91,10 +88,10 @@ def test_a_dropped_query_is_retried(data_dir, monkeypatch):
         return FakeResponse(_collection())
 
     monkeypatch.setattr("src.download.requests.get", get)
-    status, path = dl.download()
+    status, path = dl.download("basins")
     assert status == "DOWNLOADED"
     assert state["n"] == 2
-    assert os.path.basename(path).startswith("park-boundary-")
+    assert os.path.basename(path).startswith("swm-ponds-")
 
 
 def test_out_of_retries_on_a_dead_link_raises_link_unavailable(data_dir, monkeypatch):
@@ -126,19 +123,20 @@ def test_an_arcgis_error_is_not_written_as_data(data_dir, monkeypatch):
     monkeypatch.setattr("src.download.requests.get",
                         lambda *a, **k: FakeResponse(body))
     with pytest.raises(RuntimeError, match="error"):
-        dl.download()
-    assert not list(data_dir.glob("park-boundary-*.geojson"))
+        dl.download("basins")
+    assert not list(data_dir.glob("swm-ponds-*.geojson"))
 
 
 def test_a_truncated_page_stops_the_run(data_dir, monkeypatch):
-    # A partial extract is the dangerous failure: the parks that fell off the
-    # end would be reported to mappers as missing from OSM.
+    # A partial extract is the dangerous failure: the basins that fell off the
+    # end would be reported to mappers as missing from OSM. OpenData2 caps a
+    # reply at 1,000 rows, so this is closer than it was for the parks.
     body = _collection(n=10, exceededTransferLimit=True)
     monkeypatch.setattr("src.download.requests.get",
                         lambda *a, **k: FakeResponse(body))
     with pytest.raises(RuntimeError, match="exceededTransferLimit"):
-        dl.download()
-    assert not list(data_dir.glob("park-boundary-*.geojson"))
+        dl.download("basins")
+    assert not list(data_dir.glob("swm-ponds-*.geojson"))
 
 
 def test_an_unchanged_extract_skips_the_write(data_dir, monkeypatch):
@@ -146,19 +144,31 @@ def test_an_unchanged_extract_skips_the_write(data_dir, monkeypatch):
     # no meaningful Last-Modified, it is generated when you ask.
     monkeypatch.setattr("src.download.requests.get",
                         lambda *a, **k: FakeResponse(_collection()))
-    first_status, first_path = dl.download()
+    first_status, first_path = dl.download("basins")
     assert first_status == "DOWNLOADED"
 
-    second_status, second_path = dl.download()
+    second_status, second_path = dl.download("basins")
     assert (second_status, second_path) == ("SKIPPED", first_path)
-    assert len(list(data_dir.glob("park-boundary-*.geojson"))) == 1
+    assert len(list(data_dir.glob("swm-ponds-*.geojson"))) == 1
 
 
 def test_a_changed_extract_is_written(data_dir, monkeypatch):
     monkeypatch.setattr("src.download.requests.get",
-                        lambda *a, **k: FakeResponse(_collection(n=126)))
-    dl.download()
+                        lambda *a, **k: FakeResponse(_collection(n=152)))
+    dl.download("basins")
     monkeypatch.setattr("src.download.requests.get",
-                        lambda *a, **k: FakeResponse(_collection(n=127)))
-    status, _path = dl.download()
+                        lambda *a, **k: FakeResponse(_collection(n=153)))
+    status, _path = dl.download("basins")
     assert status == "DOWNLOADED"
+
+
+def test_each_layer_keeps_its_own_cache(data_dir, monkeypatch):
+    # Two layers, two sidecars: the creeks being unchanged must not make the
+    # basins look unchanged, or the reverse.
+    monkeypatch.setattr("src.download.requests.get",
+                        lambda *a, **k: FakeResponse(_collection()))
+    results = dl.download_all()
+    assert [s for s, _p in results.values()] == ["DOWNLOADED", "DOWNLOADED"]
+    assert len(list(data_dir.glob("swm-ponds-*.geojson"))) == 1
+    assert len(list(data_dir.glob("watercourse-polygons-*.geojson"))) == 1
+    assert [s for s, _p in dl.download_all().values()] == ["SKIPPED", "SKIPPED"]

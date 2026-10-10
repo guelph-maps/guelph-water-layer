@@ -166,7 +166,10 @@
     if (p.status === "creek_unnamed") {
       return '<span class="tags">no name &rarr; name=' + esc(p.name) + "</span>";
     }
-    var now = p.osm_tags ? esc(p.osm_tags) : "&mdash;";
+    if (!p.osm_tags) {
+      return '<span class="tags">draw as ' + esc(p.suggest) + "</span>";
+    }
+    var now = esc(p.osm_tags);
     if (p.status === "classified" || !p.suggest) {
       return '<span class="tags">' + now + "</span>";
     }
