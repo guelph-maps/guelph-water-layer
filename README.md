@@ -47,6 +47,9 @@ than a project of their own.
     nothing is suggested. Off by default;
   - **tagged as basin** (`classified`) — done, in either scheme. Off by default.
 
+  Each row links to OSM, iD and JOSM; the JOSM link needs JOSM running with
+  Preferences → Remote Control enabled.
+
   Its [history page](https://guelph-maps.github.io/guelph-water-layer/gaps/history.html)
   charts missing, plain water and creeks unnamed, one point per weekly run.
 
