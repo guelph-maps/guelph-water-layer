@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guelph Stormwater Basins &mdash; OSM Coverage Gaps</title>
+<link rel="stylesheet" href="../index.css">
+<link rel="stylesheet" href="gaps.css">
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script defer src="gaps.js"></script>
+<script data-goatcounter="https://osm-guelph.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head>
+<body class="app">
+
+<header class="bar">
+  <div class="bar-head">
+    <h1>Guelph stormwater basins &mdash; OSM coverage gaps</h1>
+    <a class="back" href="../">&larr; reference layer</a>
+    <a class="back" href="history.html">gaps over time &rarr;</a>
+  </div>
+  <div class="counts">
+    <div class="count missing"><strong>33</strong><span>basins missing in OSM</span></div>
+    <div class="count unclassified"><strong>50</strong><span>mapped as plain water</span></div>
+    <div class="count creek_unnamed"><strong>7</strong><span>named creeks unnamed in OSM</span></div>
+    <div class="count wetland"><strong>3</strong><span>constructed wetlands</span></div>
+    <div class="count classified"><strong>7</strong><span>tagged as basins</span></div>
+    <div class="count"><strong>93</strong><span>City basins &middot; 12 named creeks</span></div>
+    <div class="count"><strong>592</strong><span>OSM water areas</span></div>
+    <div class="count meta-count">City data 2026-10-26 &middot; OSM data 2026-10-19 23:29Z &middot; compared 2026-10-26</div>
+  </div>
+  <p class="stale">Overpass could not be reached for this build, so these gaps were computed against OSM data from <strong>2026-10-19 23:29Z</strong>. Anything mapped since then still shows as a gap.</p>
+  <details class="tagging">
+    <summary>Which tag suits which basin</summary>
+    <ul>
+      <li><strong>Wet pond</strong> (a permanent pool): <code>natural=water</code> +
+        <code>water=basin</code>, optionally <code>basin=retention</code> &mdash;
+        the scheme Guelph's mapped ponds already use.</li>
+      <li><strong>Dry basin</strong> (a grass hollow that floods after a storm):
+        <code>landuse=basin</code> + <code>basin=detention</code>. It is not
+        water most days, so not <code>natural=water</code>.</li>
+      <li><strong>Infiltration basin</strong>: <code>landuse=basin</code> +
+        <code>basin=infiltration</code>.</li>
+      <li><strong>Constructed wetland</strong>: not settled &mdash; listed apart,
+        nothing suggested.</li>
+      <li>Either scheme counts as <em>tagged as a basin</em>; a bare
+        <code>natural=water</code>, <code>water=pond</code> or
+        <code>water=reservoir</code> counts as <em>plain water</em>.</li>
+      <li>The City's <em>plan</em> is a subdivision-plan label, <strong>not a
+        name</strong> &mdash; never copy it into <code>name</code>. A creek's
+        City name is a real name: that is the one to add.</li>
+    </ul>
+  </details>
+  <p class="licence">
+    <a href="https://gismaps.guelph.ca/Images/OpenDataLicenceVersion2.pdf">Contains information licensed under the Open Government Licence – City of Guelph.</a>
+    Sources: <a href="https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData2/FeatureServer/10">Stormwater Management Pond</a>,
+    <a href="https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData1/FeatureServer/15">Watercourse Polygons</a>.
+  </p>
+</header>
+
+<div class="layout">
+  <div id="gap-map"
+       data-geojson="gaps.geojson"
+       data-raster="../tiles/raster/{z}/{x}/{y}.png"></div>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <div class="controls">
+        <label><span class="swatch missing"></span>
+          <input type="checkbox" id="show-missing" checked> Missing</label>
+        <label><span class="swatch unclassified"></span>
+          <input type="checkbox" id="show-unclassified" checked> Plain water</label>
+        <label><span class="swatch creek_unnamed"></span>
+          <input type="checkbox" id="show-creek_unnamed" checked> Creek unnamed</label>
+        <label><span class="swatch wetland"></span>
+          <input type="checkbox" id="show-wetland"> Wetland</label>
+        <label><span class="swatch classified"></span>
+          <input type="checkbox" id="show-classified"> Tagged as basin</label>
+        <input type="search" id="filter" placeholder="Filter by type, place, creek...">
+      </div>
+      <p class="hint">
+        Blue fills are the City's basins (raster layer); coloured dots flag the
+        gaps. Click a row to outline it on the map, then press <kbd>O</kbd> to
+        open it on openstreetmap.org, <kbd>I</kbd> in the iD editor or
+        <kbd>J</kbd> in JOSM (each row has the same
+        <strong>OSM&nbsp;&middot;&nbsp;iD&nbsp;&middot;&nbsp;JOSM</strong> links;
+        for a mapped basin or a creek they open the OSM element). Matching is by
+        spatial overlap &mdash; verify against imagery before editing OSM.
+      </p>
+    </div>
+    <div class="table-scroll">
+      <table id="gap-table">
+        <thead>
+          <tr><th class="col-name">Basin or creek</th><th>Size</th>
+              <th>Status</th><th>OSM now &rarr; suggested</th><th>OSM &middot; iD</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </aside>
+</div>
+
+</body>
+</html>
