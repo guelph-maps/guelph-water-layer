@@ -172,3 +172,31 @@ def test_each_layer_keeps_its_own_cache(data_dir, monkeypatch):
     assert len(list(data_dir.glob("swm-ponds-*.geojson"))) == 1
     assert len(list(data_dir.glob("watercourse-polygons-*.geojson"))) == 1
     assert [s for s, _p in dl.download_all().values()] == ["SKIPPED", "SKIPPED"]
+
+
+def _reissued(n=152):
+    """A collection whose rows carry a fresh GlobalID, as the live service
+    hands out on every request."""
+    import uuid
+    doc = json.loads(_collection(n))
+    for f in doc["features"]:
+        f["properties"]["GlobalID"] = "{%s}" % uuid.uuid4()
+    return json.dumps(doc).encode("utf-8")
+
+
+def test_a_reissued_globalid_alone_is_not_a_change(data_dir, monkeypatch):
+    # Kept in the hash, it changed every run and dated the City data to the
+    # last build rather than the last edit.
+    monkeypatch.setattr("src.download.requests.get",
+                        lambda *a, **k: FakeResponse(_reissued()))
+    _status, first_path = dl.download("basins")
+    assert dl.download("basins") == ("SKIPPED", first_path)
+
+
+def test_a_real_change_is_seen_through_a_reissued_globalid(data_dir, monkeypatch):
+    monkeypatch.setattr("src.download.requests.get",
+                        lambda *a, **k: FakeResponse(_reissued(152)))
+    dl.download("basins")
+    monkeypatch.setattr("src.download.requests.get",
+                        lambda *a, **k: FakeResponse(_reissued(153)))
+    assert dl.download("basins")[0] == "DOWNLOADED"

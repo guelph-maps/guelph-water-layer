@@ -12,8 +12,9 @@ of those -- it is generated per request, so Last-Modified is the moment you
 asked and Content-Length varies with nothing but the query.
 
 So the cache key changes and nothing else does. The bodies are ~0.4 MB and
-~3 MB, cheap enough to fetch every time; what is compared is a **sha256 of the response**.
-Identical hash means the City has not touched the layer, and the existing dated
+~3 MB, cheap enough to fetch every time; what is compared is a **sha256 of the features**, less the
+GlobalID the service reissues on every request. Identical hash means
+the City has not touched the layer, and the existing dated
 file is kept -- which also keeps DATA_DATE meaning "when the City data last
 changed" rather than "when the build last ran", exactly as the Last-Modified
 filename does for Toronto.
@@ -26,7 +27,6 @@ gate the address vault pulls behind). The weekly trigger is what makes that
 worth doing: a run lost to a dead link is not retried until next Monday.
 """
 
-import hashlib
 import json
 import os
 from datetime import date
@@ -41,6 +41,11 @@ from src import config
 # link is healthy and buys back a week when it is not.
 RETRIES = 3
 RETRY_WAIT = 30
+
+# Left out of the hash, not out of the file. The service makes GlobalID up afresh
+# for every row each time it is asked, so a hash that kept it changed on every
+# run and dated the City data to the last build instead of the last edit.
+UNSTABLE_FIELDS = ("GlobalID",)
 
 
 def download_all(force=False):
@@ -67,7 +72,8 @@ def download(key, force=False):
     print(f"Querying the {source['label']} FeatureServer ...")
     body = _fetch(source["url"])
     _check_payload(body)
-    digest = hashlib.sha256(body).hexdigest()
+    digest = citydata.digest(json.loads(body)["features"],
+                             ignore=UNSTABLE_FIELDS)
 
     sidecar = _load_sidecar(key)
     if not force and sidecar and sidecar.get("sha256") == digest:
