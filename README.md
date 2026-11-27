@@ -163,7 +163,7 @@ Both layers are ArcGIS FeatureServer queries
 optional, since the services store EPSG:26917. A `/query` reply has no
 meaningful `Last-Modified`, so each layer is cached on a **sha256 of the body**
 with its own sidecar (`data/.last-download-<key>.json`); an unchanged hash keeps
-the existing dated file, so the page's "City data" date means *when the basin
+the existing dated file, so the page's "City data last changed" date means *when the basin
 data last changed*.
 
 The service answers errors and truncation with HTTP 200, so a body carrying
